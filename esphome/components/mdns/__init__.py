@@ -173,7 +173,8 @@ async def to_code(config):
         elif CORE.is_rp2040:
             cg.add_library("LEAmDNS", None)
         elif CORE.is_nrf52:
-            # TODO
+            # nRF52 uses Zephyr (mdns_zephyr.cpp). No Arduino mDNS library required.
+            pass
 
     if CORE.is_esp32:
         add_idf_component(name="espressif/mdns", ref="1.9.1")
