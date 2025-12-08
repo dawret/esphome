@@ -512,6 +512,8 @@ def write_cpp_file() -> int:
 def compile_program(args: ArgsProtocol, config: ConfigType) -> int:
     from esphome import platformio_api
 
+    print("Compile program")
+
     # NOTE: "Build path:" format is parsed by script/ci_memory_impact_extract.py
     # If you change this format, update the regex in that script as well
     _LOGGER.info("Compiling app... Build path: %s", CORE.build_path)

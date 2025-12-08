@@ -58,12 +58,73 @@ def set_core_data(config: ConfigType) -> ConfigType:
     zephyr_set_core_data(config)
     CORE.data[KEY_CORE][KEY_TARGET_PLATFORM] = PLATFORM_NRF52
     CORE.data[KEY_CORE][KEY_TARGET_FRAMEWORK] = KEY_ZEPHYR
+    print(config)
+    print(config[CONF_FRAMEWORK][CONF_VERSION])
     CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION] = cv.Version(2, 6, 1)
 
     if config[KEY_BOOTLOADER] in BOOTLOADER_CONFIG:
         zephyr_add_pm_static(BOOTLOADER_CONFIG[config[KEY_BOOTLOADER]])
 
     return config
+
+
+TOOLCHAIN_FRAMEWORK_VERSION_LOOKUP = {
+    "recommended": {"source": "official", "version": cv.Version(1, 140201, 0)},
+    "latest": {"source": "fork", "version": cv.Version(0, 17, 4, "-0")},
+    "fork": {"source": "fork", "version": cv.Version(0, 17, 4, "-0")},
+}
+
+TOOLCHAIN_PLATCORM_VERSION_LOOKUP = {
+    cv.Version(0, 17, 4, "-0"): cv.Version(17, 4, 0),
+    cv.Version(1, 140201, 0): cv.Version(14, 2, 1),
+}
+
+ZEPHYR_FRAMEWORK_VERSION_LOOKUP = {
+    "recommended": {"source": "official", "version": cv.Version(3, 40201, 251021)},
+    "latest": {"source": "official", "version": cv.Version(3, 40201, 251021)},
+    "fork": {"source": "fork", "version": cv.Version(2, 6, 1, "-7")},
+}
+
+ZEPHYR_PLATFORM_VERSION_LOOKUP = {
+    cv.Version(3, 40201, 251021): cv.Version(4, 2, 1),
+    cv.Version(3, 40201, 0): cv.Version(4, 2, 1),
+    cv.Version(3, 40200, 0): cv.Version(4, 2, 0),
+    cv.Version(2, 6, 1, "-7"): cv.Version(2, 6, 1),
+}
+
+PLATFORM_VERSION_LOOKUP = {
+    "recommended": {"source": "official", "version": cv.Version(10, 10, 0)},
+    "latest": {"source": "official", "version": cv.Version(10, 10, 0)},
+    "fork": {"source": "fork", "version": cv.Version(10, 3, 0, "-1")},
+}
+
+PLATFORM_VERSION_SOURCES = {
+    "official": "nordicnrf52",
+    "fork": "",
+}
+
+FRAMEWORK_TYPE_ZEPHYR = "zephyr"
+FRAMEWORK_SCHEMA = cv.Schema(
+    {
+        cv.Optional(CONF_TYPE): cv.one_of(FRAMEWORK_TYPE_ZEPHYR),
+        cv.Optional(CONF_VERSION, default="recommended"): cv.string_strict,
+        cv.Optional(CONF_SOURCE, default="official"): cv.string_strict,
+        cv.Optional(CONF_PLATFORM_VERSION, default="recommended"): cv.string_strict,
+        cv.Optional(CONF_PLATFORM_SOURCE): cv.string_strict,
+    }
+)
+
+
+def _check_versions(config):
+    config = config.copy()
+    value = config[CONF_FRAMEWORK]
+
+    if value[CONF_VERSION] in PLATFORM_VERSION_LOOKUP:
+        platform_lookup = PLATFORM_VERSION_LOOKUP[value[CONF_VERSION]]
+        value[CONF_PLATFORM_VERSION] = platform_lookup["version"]
+        value[CONF_PLATFORM_SOURCE] = platform_lookup["source"]
+    else:
+        pass
 
 
 BOOTLOADERS = [
@@ -122,6 +183,7 @@ CONFIG_SCHEMA = cv.All(
                     cv.Required(CONF_RESET_PIN): pins.gpio_output_pin_schema,
                 }
             ),
+            cv.Optional(CONF_FRAMEWORK): FRAMEWORK_SCHEMA,
             cv.Optional(CONF_DCDC, default=True): cv.boolean,
             cv.Optional(CONF_REG0): cv.Schema(
                 {
@@ -167,13 +229,13 @@ async def to_code(config: ConfigType) -> None:
     cg.add_platformio_option(CONF_FRAMEWORK, CORE.data[KEY_CORE][KEY_TARGET_FRAMEWORK])
     cg.add_platformio_option(
         "platform",
-        "https://github.com/tomaszduda23/platform-nordicnrf52/archive/refs/tags/v10.3.0-1.zip",
+        "nordicnrf52@10.10.0",
     )
     cg.add_platformio_option(
         "platform_packages",
         [
-            "platformio/framework-zephyr@https://github.com/tomaszduda23/framework-sdk-nrf/archive/refs/tags/v2.6.1-7.zip",
-            "platformio/toolchain-gccarmnoneeabi@https://github.com/tomaszduda23/toolchain-sdk-ng/archive/refs/tags/v0.17.4-0.zip",
+            "platformio/framework-zephyr@3.40201.251021",
+            "platformio/toolchain-gccarmnoneeabi@1.140201.0",
         ],
     )
 
@@ -198,7 +260,7 @@ async def to_code(config: ConfigType) -> None:
 
     if dfu_config := config.get(CONF_DFU):
         CORE.add_job(_dfu_to_code, dfu_config)
-    zephyr_add_prj_conf("BOARD_ENABLE_DCDC", config[CONF_DCDC])
+    # zephyr_add_prj_conf("BOARD_ENABLE_DCDC", config[CONF_DCDC])
 
     if reg0_config := config.get(CONF_REG0):
         value = VOLTAGE_LEVELS.index(reg0_config[CONF_VOLTAGE])

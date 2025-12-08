@@ -121,9 +121,9 @@ def zephyr_to_code(config):
     zephyr_add_prj_conf("NEWLIB_LIBC", True)
     zephyr_add_prj_conf("CONFIG_FPU", True)
     zephyr_add_prj_conf("NEWLIB_LIBC_FLOAT_PRINTF", True)
-    zephyr_add_prj_conf("CPLUSPLUS", True)
+    zephyr_add_prj_conf("CONFIG_CPP", True)
     zephyr_add_prj_conf("CONFIG_STD_CPP20", True)
-    zephyr_add_prj_conf("LIB_CPLUSPLUS", True)
+    zephyr_add_prj_conf("CONFIG_GLIBCXX_LIBCPP", True)
     # preferences
     zephyr_add_prj_conf("SETTINGS", True)
     zephyr_add_prj_conf("NVS", True)
@@ -136,7 +136,7 @@ def zephyr_to_code(config):
     zephyr_add_prj_conf("UART_CONSOLE", False)
     zephyr_add_prj_conf("CONSOLE", False, False)
     # use NFC pins as GPIO
-    zephyr_add_prj_conf("NFCT_PINS_AS_GPIOS", True)
+    # zephyr_add_prj_conf("NFCT_PINS_AS_GPIOS", True)
 
     # <err> os: ***** USAGE FAULT *****
     # <err> os:   Illegal load of EXC_RETURN into PC
@@ -240,7 +240,8 @@ def copy_files():
         },
         "softdevice": {
             "sd_fwid": "0x00B6"
-        }
+        },
+        "cpu": "cortex-m4"
     }
 }
 """
