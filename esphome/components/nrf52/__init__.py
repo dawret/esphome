@@ -24,10 +24,12 @@ from esphome.components.zephyr.const import (
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_BOARD,
+    CONF_COMPONENTS,
     CONF_FRAMEWORK,
     CONF_ID,
+    CONF_NAME,
     CONF_RESET_PIN,
-    CONF_VERSION,
+    CONF_SOURCE,
     CONF_VOLTAGE,
     KEY_CORE,
     KEY_FRAMEWORK_VERSION,
@@ -117,6 +119,54 @@ CONF_UICR_ERASE = "uicr_erase"
 
 VOLTAGE_LEVELS = [1.8, 2.1, 2.4, 2.7, 3.0, 3.3]
 
+PLATFORM_RECOMMENDED_SOURCE = "https://github.com/tomaszduda23/platform-nordicnrf52/archive/refs/tags/v10.3.0-1.zip"
+FRAMEWORK_ZEPHYR_PACKAGE_NAME = "platformio/framework-zephyr"
+FRAMEWORK_ZEPHYR_RECOMMENDED_SOURCE = (
+    "https://github.com/tomaszduda23/framework-sdk-nrf/archive/refs/tags/v3.2.0-0.zip"
+)
+
+
+def _validate_framework_config(config: ConfigType) -> ConfigType:
+    """Validate the framework configuration."""
+    config = config.copy()
+    if config[CONF_SOURCE] == "recommended":
+        config[CONF_SOURCE] = PLATFORM_RECOMMENDED_SOURCE
+
+    components = config.get(CONF_COMPONENTS, [])
+    components = {c[CONF_NAME]: c[CONF_SOURCE] for c in components}
+    if (
+        FRAMEWORK_ZEPHYR_PACKAGE_NAME not in components
+        or components[FRAMEWORK_ZEPHYR_PACKAGE_NAME] == "recommended"
+    ):
+        components[FRAMEWORK_ZEPHYR_PACKAGE_NAME] = FRAMEWORK_ZEPHYR_RECOMMENDED_SOURCE
+
+    config[CONF_COMPONENTS] = [
+        f"{name}@{source}" for name, source in components.items()
+    ]
+
+    return config
+
+
+FRAMEWORK_SCHEMA = cv.All(
+    cv.Schema(
+        {
+            cv.Optional(CONF_SOURCE, default="recommended"): cv.string_strict,
+            cv.Optional(CONF_COMPONENTS, default=[]): cv.ensure_list(
+                cv.Schema(
+                    {
+                        cv.Required(CONF_NAME): cv.string_strict,
+                        cv.Optional(
+                            CONF_SOURCE, default="recommended"
+                        ): cv.string_strict,
+                    }
+                )
+            ),
+        }
+    ),
+    _validate_framework_config,
+)
+
+
 CONFIG_SCHEMA = cv.All(
     _detect_bootloader,
     set_core_data,
@@ -140,11 +190,7 @@ CONFIG_SCHEMA = cv.All(
                     cv.Optional(CONF_UICR_ERASE, default=False): cv.boolean,
                 }
             ),
-            cv.Optional(CONF_FRAMEWORK, default={CONF_VERSION: "2.6.1-7"}): cv.Schema(
-                {
-                    cv.Required(CONF_VERSION): cv.string_strict,
-                }
-            ),
+            cv.Optional(CONF_FRAMEWORK, default={}): FRAMEWORK_SCHEMA,
         }
     ),
     set_framework,
@@ -179,17 +225,16 @@ async def to_code(config: ConfigType) -> None:
     # nRF52 processors are single-core
     cg.add_define(ThreadModel.SINGLE)
     cg.add_platformio_option(CONF_FRAMEWORK, CORE.data[KEY_CORE][KEY_TARGET_FRAMEWORK])
+    conf = config[CONF_FRAMEWORK]
     cg.add_platformio_option(
         "platform",
-        "https://github.com/tomaszduda23/platform-nordicnrf52/archive/refs/tags/v10.3.0-1.zip",
+        conf[CONF_SOURCE],
     )
-    cg.add_platformio_option(
-        "platform_packages",
-        [
-            f"platformio/framework-zephyr@https://github.com/tomaszduda23/framework-sdk-nrf/archive/refs/tags/v{CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION]}.zip",
-            "platformio/toolchain-gccarmnoneeabi@https://github.com/tomaszduda23/toolchain-sdk-ng/archive/refs/tags/v0.17.4-0.zip",
-        ],
-    )
+    if CONF_COMPONENTS in conf:
+        cg.add_platformio_option(
+            "platform_packages",
+            conf[CONF_COMPONENTS],
+        )
 
     if config[KEY_BOOTLOADER] == BOOTLOADER_MCUBOOT:
         cg.add_define("USE_BOOTLOADER_MCUBOOT")
@@ -335,12 +380,14 @@ def _upload_using_platformio(
 def upload_program(config: ConfigType, args, host: str) -> bool:
     from esphome.__main__ import check_permissions, get_port_type
 
+    print(f"Uploading to nrf52 via {host} ({args=})")
+
     result = 0
     handled = False
 
     if get_port_type(host) == "SERIAL":
         check_permissions(host)
-        result = _upload_using_platformio(config, host, ["-t", "upload"])
+        result = _upload_using_platformio(config, host, ["-t", "flash_dfu"])
         handled = True
 
     if host == "PYOCD":
