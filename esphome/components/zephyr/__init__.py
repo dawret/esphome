@@ -3,7 +3,8 @@ import textwrap
 from typing import TypedDict
 
 import esphome.codegen as cg
-from esphome.const import CONF_BOARD
+import esphome.config_validation as cv
+from esphome.const import CONF_BOARD, KEY_CORE, KEY_FRAMEWORK_VERSION
 from esphome.core import CORE
 from esphome.helpers import copy_file_if_changed, write_file_if_changed
 
@@ -114,6 +115,7 @@ def zephyr_to_code(config):
     cg.set_cpp_standard("gnu++20")
     # build is done by west so bypass board checking in platformio
     cg.add_platformio_option("boards_dir", CORE.relative_build_path("boards"))
+
     # c++ support
     zephyr_add_prj_conf("NEWLIB_LIBC", True)
     zephyr_add_prj_conf("FPU", True)
@@ -150,6 +152,9 @@ def _format_prj_conf_val(value: PrjConfValueType) -> str:
 
 
 def zephyr_add_cdc_acm(config, id):
+    framework_ver: cv.Version = CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION]
+    if framework_ver >= cv.Version(3, 2, 0):
+        zephyr_add_prj_conf("CONFIG_USB_DEVICE_STACK_NEXT", False)
     zephyr_add_prj_conf("USB_DEVICE_STACK", True)
     zephyr_add_prj_conf("USB_CDC_ACM", True)
     # prevent device to go to susspend, without this communication stop working in python
@@ -210,7 +215,7 @@ def copy_files():
 
     if zephyr_data()[KEY_BOOTLOADER] == BOOTLOADER_MCUBOOT or zephyr_data()[
         KEY_BOARD
-    ] in ["xiao_ble"]:
+    ] in ["xiao_ble", "adafruit_itsybitsy"]:
         fake_board_manifest = """
 {
     "frameworks": [
