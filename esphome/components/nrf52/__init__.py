@@ -196,7 +196,7 @@ CONFIG_SCHEMA = cv.All(
                     cv.Optional(CONF_UICR_ERASE, default=False): cv.boolean,
                 }
             ),
-            cv.Optional(CONF_FRAMEWORK, default=FRAMEWORK_SCHEMA({})): FRAMEWORK_SCHEMA,
+            cv.Optional(CONF_FRAMEWORK, default={}): FRAMEWORK_SCHEMA,
         }
     ),
 )
