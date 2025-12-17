@@ -11,6 +11,7 @@ from esphome.components.zephyr import (
     zephyr_add_overlay,
     zephyr_add_pm_static,
     zephyr_add_prj_conf,
+    zephyr_add_sysbuild_conf,
     zephyr_data,
     zephyr_set_core_data,
     zephyr_to_code,
@@ -244,6 +245,9 @@ async def to_code(config: ConfigType) -> None:
 
     if config[KEY_BOOTLOADER] == BOOTLOADER_MCUBOOT:
         cg.add_define("USE_BOOTLOADER_MCUBOOT")
+        zephyr_add_sysbuild_conf("SB_CONFIG_BOOTLOADER_MCUBOOT", True)
+        zephyr_add_sysbuild_conf("SB_CONFIG_BOOT_SIGNATURE_TYPE_NONE", True)
+        zephyr_add_sysbuild_conf("SB_CONFIG_BOOT_SIGNATURE_KEY_FILE", "")
     else:
         if "_sd" in config[KEY_BOOTLOADER]:
             bootloader = config[KEY_BOOTLOADER].split("_")
