@@ -14,5 +14,6 @@ KEY_SYSBUILD_CONF: Final = "sysbuild.conf"
 KEY_ZEPHYR = "zephyr"
 KEY_BOARD: Final = "board"
 KEY_USER: Final = "user"
+KEY_MODULES: Final = "modules"
 
 zephyr_ns = cg.esphome_ns.namespace("zephyr")

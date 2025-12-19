@@ -6,18 +6,18 @@ from pathlib import Path
 
 from esphome import pins
 import esphome.codegen as cg
+from esphome.helpers import copy_file_if_changed, write_file_if_changed
 from esphome.components.zephyr import (
     copy_files as zephyr_copy_files,
+    Section,
     zephyr_add_overlay,
     zephyr_add_pm_static,
     zephyr_add_prj_conf,
-    zephyr_add_sysbuild_conf,
     zephyr_data,
-    zephyr_set_core_data,
-    zephyr_to_code,
-)
+    zephyr_set_core_data)
 from esphome.components.zephyr.const import (
     BOOTLOADER_MCUBOOT,
+    KEY_BOARD,
     KEY_BOOTLOADER,
     KEY_ZEPHYR,
 )
@@ -54,7 +54,22 @@ from .const import (
 from .gpio import nrf52_pin_to_code  # noqa
 
 CODEOWNERS = ["@tomaszduda23"]
-AUTO_LOAD = ["zephyr"]
+
+
+def _auto_load(conf: ConfigType) -> list[str]:
+    """Dynamically auto-load components based on nrf52 config.
+
+    Always load `zephyr`. When `mcuboot` is selected as the bootloader,
+    also auto-load the `mcuboot` component so it can apply build-time
+    configuration.
+    """
+    auto = ["zephyr"]
+    if conf.get(KEY_BOOTLOADER) == BOOTLOADER_MCUBOOT:
+        auto.append("mcuboot")
+    return auto
+
+
+AUTO_LOAD = _auto_load
 IS_TARGET_PLATFORM = True
 _LOGGER = logging.getLogger(__name__)
 
@@ -120,13 +135,16 @@ VOLTAGE_LEVELS = [1.8, 2.1, 2.4, 2.7, 3.0, 3.3]
 PLATFORM_RECOMMENDED_SOURCE = "https://github.com/tomaszduda23/platform-nordicnrf52/archive/refs/tags/v10.3.0-1.zip"
 FRAMEWORK_ZEPHYR_PACKAGE_NAME = "platformio/framework-zephyr"
 TOOLCHAIN_GCCARM_PACKAGE_NAME = "platformio/toolchain-gccarmnoneeabi"
+NORDIC_NRFUTIL_PACKAGE_NAME = "nordic-nrfutil"
 FRAMEWORK_ZEPHYR_RECOMMENDED_SOURCE = (
     "https://github.com/tomaszduda23/framework-sdk-nrf/archive/refs/tags/v3.2.0-0.zip"
 )
 TOOLCHAIN_GCCARM_RECOMMENDED_SOURCE = (
     "https://github.com/tomaszduda23/toolchain-sdk-ng/archive/refs/tags/v0.17.4-0.zip"
 )
-
+NORDIC_NRFUTIL_RECOMMENDED_SOURCE = (
+    "file:///home/dawret/src/nordic-nrfutil"
+)
 
 def _validate_framework_config(config: ConfigType) -> ConfigType:
     """Validate the framework configuration."""
@@ -146,6 +164,11 @@ def _validate_framework_config(config: ConfigType) -> ConfigType:
         or components[TOOLCHAIN_GCCARM_PACKAGE_NAME] == "recommended"
     ):
         components[TOOLCHAIN_GCCARM_PACKAGE_NAME] = TOOLCHAIN_GCCARM_RECOMMENDED_SOURCE
+    if (
+        NORDIC_NRFUTIL_PACKAGE_NAME not in components
+        or components[NORDIC_NRFUTIL_PACKAGE_NAME] == "recommended"
+    ):
+        components[NORDIC_NRFUTIL_PACKAGE_NAME] = NORDIC_NRFUTIL_RECOMMENDED_SOURCE
 
     config[CONF_COMPONENTS] = [
         f"{name}@{source}" for name, source in components.items()
@@ -224,6 +247,7 @@ FINAL_VALIDATE_SCHEMA = _final_validate
 @coroutine_with_priority(CoroPriority.PLATFORM)
 async def to_code(config: ConfigType) -> None:
     """Convert the configuration to code."""
+    print("nrf52 to_code")
     cg.add_platformio_option("board", config[CONF_BOARD])
     cg.add_build_flag("-DUSE_NRF52")
     cg.add_define("ESPHOME_BOARD", config[CONF_BOARD])
@@ -237,18 +261,12 @@ async def to_code(config: ConfigType) -> None:
         conf[CONF_SOURCE],
     )
     if CONF_COMPONENTS in conf:
-        print(conf[CONF_COMPONENTS])
         cg.add_platformio_option(
             "platform_packages",
             conf[CONF_COMPONENTS],
         )
 
-    if config[KEY_BOOTLOADER] == BOOTLOADER_MCUBOOT:
-        cg.add_define("USE_BOOTLOADER_MCUBOOT")
-        zephyr_add_sysbuild_conf("SB_CONFIG_BOOTLOADER_MCUBOOT", True)
-        zephyr_add_sysbuild_conf("SB_CONFIG_BOOT_SIGNATURE_TYPE_NONE", True)
-        zephyr_add_sysbuild_conf("SB_CONFIG_BOOT_SIGNATURE_KEY_FILE", "")
-    else:
+    if config[KEY_BOOTLOADER] != BOOTLOADER_MCUBOOT:
         if "_sd" in config[KEY_BOOTLOADER]:
             bootloader = config[KEY_BOOTLOADER].split("_")
             sd_id = bootloader[2][2:]
@@ -263,13 +281,25 @@ async def to_code(config: ConfigType) -> None:
         cg.add_platformio_option("board_upload.require_upload_port", "true")
         cg.add_platformio_option("board_upload.wait_for_upload_port", "true")
 
-    zephyr_to_code(config)
-
     if dfu_config := config.get(CONF_DFU):
         CORE.add_job(_dfu_to_code, dfu_config)
+
+    #zephyr_add_prj_conf("CONFIG_BOARD_HAS_NRF5_BOOTLOADER", True)
+    """settings_storage:
+    address: 0xd8000
+    size: 0x8000
+    region: flash_primary
+    open_bootloader:
+    address: 0xe0000
+    size: 0x20000
+    region: flash_primary"""
+    zephyr_add_pm_static([Section("settings_storage", 0xd8000, 0x8000, "flash_primary")])
+    zephyr_add_pm_static([Section("open_bootloader", 0xe0000, 0x20000, "flash_primary")])
+
     framework_ver: cv.Version = CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION]
     if framework_ver < cv.Version(3, 2, 0):
         zephyr_add_prj_conf("BOARD_ENABLE_DCDC", config[CONF_DCDC])
+        zephyr_add_prj_conf("NFCT_PINS_AS_GPIOS", True)
     else:
         zephyr_add_overlay(
             f"""
@@ -278,6 +308,8 @@ async def to_code(config: ConfigType) -> None:
                 }};
             """
         )
+        zephyr_add_overlay("&uicr {nfct-pins-as-gpios;};")
+        
 
     if reg0_config := config.get(CONF_REG0):
         value = VOLTAGE_LEVELS.index(reg0_config[CONF_VOLTAGE])
@@ -294,11 +326,6 @@ async def _dfu_to_code(dfu_config):
     cg.add(var.set_reset_pin(pin))
     zephyr_add_prj_conf("CDC_ACM_DTE_RATE_CALLBACK_SUPPORT", True)
     await cg.register_component(var, dfu_config)
-
-
-def copy_files() -> None:
-    """Copy files to the build directory."""
-    zephyr_copy_files()
 
 
 def get_download_types(storage_json: StorageJSON) -> list[dict[str, str]]:
@@ -363,13 +390,14 @@ def _upload_using_platformio(
 
 def upload_program(config: ConfigType, args, host: str) -> bool:
     from esphome.__main__ import check_permissions, get_port_type
+    print(f"Uploading to nrf52 via {host} ({args=})")
 
     result = 0
     handled = False
 
     if get_port_type(host) == "SERIAL":
         check_permissions(host)
-        result = _upload_using_platformio(config, host, ["-t", "upload"])
+        result = _upload_using_platformio(config, host, ["-t", "flash_dfu"])
         handled = True
 
     if host == "PYOCD":
@@ -397,3 +425,37 @@ def show_logs(config: ConfigType, args, devices: list[str]) -> bool:
         asyncio.run(logger_connect(address))
         return True
     return False
+
+
+def copy_files():
+    zephyr_copy_files()
+    if zephyr_data()[KEY_BOOTLOADER] == BOOTLOADER_MCUBOOT or zephyr_data()[
+        KEY_BOARD
+    ] in ["xiao_ble", "adafruit_itsybitsy"]:
+        fake_board_manifest = """
+{
+    "frameworks": [
+        "zephyr"
+    ],
+    "name": "esphome nrf52",
+    "upload": {
+        "maximum_ram_size": 248832,
+        "maximum_size": 815104,
+        "speed": 115200
+    },
+    "url": "https://esphome.io/",
+    "vendor": "esphome",
+    "build": {
+        "bsp": {
+            "name": "adafruit"
+        },
+        "softdevice": {
+            "sd_fwid": "0x00B6"
+        }
+    }
+}
+"""
+        write_file_if_changed(
+            CORE.relative_build_path(f"boards/{zephyr_data()[KEY_BOARD]}.json"),
+            fake_board_manifest,
+        )
