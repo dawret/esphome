@@ -23,6 +23,11 @@
   //  "type=bind,source=/var/run/dbus,target=/var/run/dbus",
   //  "type=bind,source=/var/run/avahi-daemon/socket,target=/var/run/avahi-daemon/socket"
   //],
+  "mounts": [
+    "type=bind,source=${localEnv:HOME}/src/framework-sdk-nrf,target=/mnt/framework-sdk-nrf",
+    "type=bind,source=${localEnv:HOME}/src/platform-nordicnrf52,target=/mnt/platform-nordicnrf52",
+    "type=bind,source=${localEnv:HOME}/src/nordic-nrfutil,target=/mnt/nordic-nrfutil"
+  ],
   "customizations": {
     "vscode": {
       "extensions": [

@@ -31,7 +31,7 @@ RUN \
     platformio settings set enable_telemetry No \
     && platformio settings set check_platformio_interval 1000000
 
-COPY script/platformio_install_deps.py platformio.ini ./
-RUN ./platformio_install_deps.py platformio.ini --libraries --platforms --tools
+#COPY script/platformio_install_deps.py platformio.ini ./
+#RUN ./platformio_install_deps.py platformio.ini --libraries --platforms --tools
 
 WORKDIR /workspaces

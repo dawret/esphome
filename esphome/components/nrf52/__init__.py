@@ -14,7 +14,8 @@ from esphome.components.zephyr import (
     zephyr_add_pm_static,
     zephyr_add_prj_conf,
     zephyr_data,
-    zephyr_set_core_data)
+    zephyr_set_core_data,
+)
 from esphome.components.zephyr.const import (
     BOOTLOADER_MCUBOOT,
     KEY_BOARD,
@@ -142,9 +143,8 @@ FRAMEWORK_ZEPHYR_RECOMMENDED_SOURCE = (
 TOOLCHAIN_GCCARM_RECOMMENDED_SOURCE = (
     "https://github.com/tomaszduda23/toolchain-sdk-ng/archive/refs/tags/v0.17.4-0.zip"
 )
-NORDIC_NRFUTIL_RECOMMENDED_SOURCE = (
-    "file:///home/dawret/src/nordic-nrfutil"
-)
+NORDIC_NRFUTIL_RECOMMENDED_SOURCE = "file:///home/dawret/src/nordic-nrfutil"
+
 
 def _validate_framework_config(config: ConfigType) -> ConfigType:
     """Validate the framework configuration."""
@@ -159,11 +159,6 @@ def _validate_framework_config(config: ConfigType) -> ConfigType:
         or components[FRAMEWORK_ZEPHYR_PACKAGE_NAME] == "recommended"
     ):
         components[FRAMEWORK_ZEPHYR_PACKAGE_NAME] = FRAMEWORK_ZEPHYR_RECOMMENDED_SOURCE
-    if (
-        TOOLCHAIN_GCCARM_PACKAGE_NAME not in components
-        or components[TOOLCHAIN_GCCARM_PACKAGE_NAME] == "recommended"
-    ):
-        components[TOOLCHAIN_GCCARM_PACKAGE_NAME] = TOOLCHAIN_GCCARM_RECOMMENDED_SOURCE
     if (
         NORDIC_NRFUTIL_PACKAGE_NAME not in components
         or components[NORDIC_NRFUTIL_PACKAGE_NAME] == "recommended"
@@ -284,7 +279,7 @@ async def to_code(config: ConfigType) -> None:
     if dfu_config := config.get(CONF_DFU):
         CORE.add_job(_dfu_to_code, dfu_config)
 
-    #zephyr_add_prj_conf("CONFIG_BOARD_HAS_NRF5_BOOTLOADER", True)
+    # zephyr_add_prj_conf("CONFIG_BOARD_HAS_NRF5_BOOTLOADER", True)
     """settings_storage:
     address: 0xd8000
     size: 0x8000
@@ -293,8 +288,12 @@ async def to_code(config: ConfigType) -> None:
     address: 0xe0000
     size: 0x20000
     region: flash_primary"""
-    zephyr_add_pm_static([Section("settings_storage", 0xd8000, 0x8000, "flash_primary")])
-    zephyr_add_pm_static([Section("open_bootloader", 0xe0000, 0x20000, "flash_primary")])
+    zephyr_add_pm_static(
+        [Section("settings_storage", 0xD8000, 0x8000, "flash_primary")]
+    )
+    zephyr_add_pm_static(
+        [Section("open_bootloader", 0xE0000, 0x20000, "flash_primary")]
+    )
 
     framework_ver: cv.Version = CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION]
     if framework_ver < cv.Version(3, 2, 0):
@@ -309,7 +308,6 @@ async def to_code(config: ConfigType) -> None:
             """
         )
         zephyr_add_overlay("&uicr {nfct-pins-as-gpios;};")
-        
 
     if reg0_config := config.get(CONF_REG0):
         value = VOLTAGE_LEVELS.index(reg0_config[CONF_VOLTAGE])
@@ -390,6 +388,7 @@ def _upload_using_platformio(
 
 def upload_program(config: ConfigType, args, host: str) -> bool:
     from esphome.__main__ import check_permissions, get_port_type
+
     print(f"Uploading to nrf52 via {host} ({args=})")
 
     result = 0
