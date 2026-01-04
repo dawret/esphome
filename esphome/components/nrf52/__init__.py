@@ -118,12 +118,8 @@ VOLTAGE_LEVELS = [1.8, 2.1, 2.4, 2.7, 3.0, 3.3]
 
 PLATFORM_RECOMMENDED_SOURCE = "https://github.com/tomaszduda23/platform-nordicnrf52/archive/refs/tags/v10.3.0-1.zip"
 FRAMEWORK_ZEPHYR_PACKAGE_NAME = "platformio/framework-zephyr"
-TOOLCHAIN_GCCARM_PACKAGE_NAME = "platformio/toolchain-gccarmnoneeabi"
 FRAMEWORK_ZEPHYR_RECOMMENDED_SOURCE = (
     "https://github.com/tomaszduda23/framework-sdk-nrf/archive/refs/tags/v3.2.0-0.zip"
-)
-TOOLCHAIN_GCCARM_RECOMMENDED_SOURCE = (
-    "https://github.com/tomaszduda23/toolchain-sdk-ng/archive/refs/tags/v0.17.4-0.zip"
 )
 
 
@@ -140,11 +136,6 @@ def _validate_framework_config(config: ConfigType) -> ConfigType:
         or components[FRAMEWORK_ZEPHYR_PACKAGE_NAME] == "recommended"
     ):
         components[FRAMEWORK_ZEPHYR_PACKAGE_NAME] = FRAMEWORK_ZEPHYR_RECOMMENDED_SOURCE
-    if (
-        TOOLCHAIN_GCCARM_PACKAGE_NAME not in components
-        or components[TOOLCHAIN_GCCARM_PACKAGE_NAME] == "recommended"
-    ):
-        components[TOOLCHAIN_GCCARM_PACKAGE_NAME] = TOOLCHAIN_GCCARM_RECOMMENDED_SOURCE
 
     config[CONF_COMPONENTS] = [
         f"{name}@{source}" for name, source in components.items()
@@ -236,7 +227,6 @@ async def to_code(config: ConfigType) -> None:
         conf[CONF_SOURCE],
     )
     if CONF_COMPONENTS in conf:
-        print(conf[CONF_COMPONENTS])
         cg.add_platformio_option(
             "platform_packages",
             conf[CONF_COMPONENTS],
@@ -360,12 +350,14 @@ def _upload_using_platformio(
 def upload_program(config: ConfigType, args, host: str) -> bool:
     from esphome.__main__ import check_permissions, get_port_type
 
+    print(f"Uploading to nrf52 via {host} ({args=})")
+
     result = 0
     handled = False
 
     if get_port_type(host) == "SERIAL":
         check_permissions(host)
-        result = _upload_using_platformio(config, host, ["-t", "upload"])
+        result = _upload_using_platformio(config, host, ["-t", "flash_dfu"])
         handled = True
 
     if host == "PYOCD":
