@@ -28,7 +28,7 @@ static const struct bt_data SD[] = {
 };
 
 #if KERNEL_VERSION_MAJOR >= 4
-const struct bt_le_adv_param *const ADV_PARAM = BT_LE_ADV_CONN_2;
+const struct bt_le_adv_param *const ADV_PARAM = BT_LE_ADV_CONN_FAST_2;
 #else
 const struct bt_le_adv_param *const ADV_PARAM = BT_LE_ADV_CONN;
 #endif
