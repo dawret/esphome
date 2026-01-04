@@ -119,7 +119,9 @@ CONF_UICR_ERASE = "uicr_erase"
 
 VOLTAGE_LEVELS = [1.8, 2.1, 2.4, 2.7, 3.0, 3.3]
 
-PLATFORM_RECOMMENDED_SOURCE = "https://github.com/tomaszduda23/platform-nordicnrf52/archive/refs/tags/v10.3.0-1.zip"
+PLATFORM_RECOMMENDED_SOURCE = (
+    "https://github.com/dawret/platform-nordicnrf52/archive/refs/tags/v11.0.0.tar.gz"
+)
 PLATFORM_RECOMMENDED_SDK_VERSION = "3.2.0"
 
 
