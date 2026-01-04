@@ -29,6 +29,7 @@ from esphome.const import (
     CONF_NAME,
     CONF_RESET_PIN,
     CONF_SOURCE,
+    CONF_VERSION,
     CONF_VOLTAGE,
     KEY_CORE,
     KEY_FRAMEWORK_VERSION,
@@ -65,7 +66,9 @@ def set_core_data(config: ConfigType) -> ConfigType:
     zephyr_set_core_data(config)
     CORE.data[KEY_CORE][KEY_TARGET_PLATFORM] = PLATFORM_NRF52
     CORE.data[KEY_CORE][KEY_TARGET_FRAMEWORK] = KEY_ZEPHYR
-    CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION] = cv.Version(3, 2, 0)
+    CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION] = cv.Version.parse(
+        config[CONF_FRAMEWORK][CONF_VERSION]
+    )
 
     if config[KEY_BOOTLOADER] in BOOTLOADER_CONFIG:
         zephyr_add_pm_static(BOOTLOADER_CONFIG[config[KEY_BOOTLOADER]])
@@ -117,10 +120,7 @@ CONF_UICR_ERASE = "uicr_erase"
 VOLTAGE_LEVELS = [1.8, 2.1, 2.4, 2.7, 3.0, 3.3]
 
 PLATFORM_RECOMMENDED_SOURCE = "https://github.com/tomaszduda23/platform-nordicnrf52/archive/refs/tags/v10.3.0-1.zip"
-FRAMEWORK_ZEPHYR_PACKAGE_NAME = "platformio/framework-zephyr"
-FRAMEWORK_ZEPHYR_RECOMMENDED_SOURCE = (
-    "https://github.com/tomaszduda23/framework-sdk-nrf/archive/refs/tags/v3.2.0-0.zip"
-)
+PLATFORM_RECOMMENDED_SDK_VERSION = "3.2.0"
 
 
 def _validate_framework_config(config: ConfigType) -> ConfigType:
@@ -128,19 +128,11 @@ def _validate_framework_config(config: ConfigType) -> ConfigType:
     config = config.copy()
     if config[CONF_SOURCE] == "recommended":
         config[CONF_SOURCE] = PLATFORM_RECOMMENDED_SOURCE
+    if config[CONF_VERSION] == "recommended":
+        config[CONF_VERSION] = PLATFORM_RECOMMENDED_SDK_VERSION
 
     components = config.get(CONF_COMPONENTS, [])
-    components = {c[CONF_NAME]: c[CONF_SOURCE] for c in components}
-    if (
-        FRAMEWORK_ZEPHYR_PACKAGE_NAME not in components
-        or components[FRAMEWORK_ZEPHYR_PACKAGE_NAME] == "recommended"
-    ):
-        components[FRAMEWORK_ZEPHYR_PACKAGE_NAME] = FRAMEWORK_ZEPHYR_RECOMMENDED_SOURCE
-
-    config[CONF_COMPONENTS] = [
-        f"{name}@{source}" for name, source in components.items()
-    ]
-
+    config[CONF_COMPONENTS] = [f"{c[CONF_NAME]}@{c[CONF_SOURCE]}" for c in components]
     return config
 
 
@@ -148,6 +140,7 @@ FRAMEWORK_SCHEMA = cv.All(
     cv.Schema(
         {
             cv.Optional(CONF_SOURCE, default="recommended"): cv.string_strict,
+            cv.Optional(CONF_VERSION, default="recommended"): cv.string_strict,
             cv.Optional(CONF_COMPONENTS, default=[]): cv.ensure_list(
                 cv.Schema(
                     {
@@ -165,8 +158,6 @@ FRAMEWORK_SCHEMA = cv.All(
 
 
 CONFIG_SCHEMA = cv.All(
-    _detect_bootloader,
-    set_core_data,
     cv.Schema(
         {
             cv.Required(CONF_BOARD): cv.string_strict,
@@ -190,6 +181,8 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_FRAMEWORK, default={}): FRAMEWORK_SCHEMA,
         }
     ),
+    _detect_bootloader,
+    set_core_data,
 )
 
 
