@@ -4,6 +4,7 @@
 #include "esphome/core/log.h"
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
+#include <zephyr/version.h>
 
 namespace esphome::zephyr_ble_server {
 
@@ -26,7 +27,11 @@ static const struct bt_data SD[] = {
 #endif
 };
 
+#if KERNEL_VERSION_MAJOR >= 4
+const struct bt_le_adv_param *const ADV_PARAM = BT_LE_ADV_CONN_FAST_2;
+#else
 const struct bt_le_adv_param *const ADV_PARAM = BT_LE_ADV_CONN;
+#endif
 
 static void advertise(struct k_work *work) {
   int rc = bt_le_adv_stop();
