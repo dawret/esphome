@@ -59,6 +59,11 @@ IS_TARGET_PLATFORM = True
 _LOGGER = logging.getLogger(__name__)
 
 
+def set_platform(config: ConfigType) -> ConfigType:
+    CORE.data[KEY_CORE][KEY_TARGET_PLATFORM] = PLATFORM_NRF52
+    return config
+
+
 def set_core_data(config: ConfigType) -> ConfigType:
     # nrf-sdk v3.2.0 changed the name of this board
     if config[CONF_BOARD] == "adafruit_itsybitsy_nrf52840":
@@ -160,6 +165,7 @@ FRAMEWORK_SCHEMA = cv.All(
 
 
 CONFIG_SCHEMA = cv.All(
+    set_platform,
     cv.Schema(
         {
             cv.Required(CONF_BOARD): cv.string_strict,
@@ -352,7 +358,7 @@ def upload_program(config: ConfigType, args, host: str) -> bool:
 
     if get_port_type(host) == "SERIAL":
         check_permissions(host)
-        result = _upload_using_platformio(config, host, ["-t", "flash_dfu"])
+        result = _upload_using_platformio(config, host, ["-t", "upload"])
         handled = True
 
     if host == "PYOCD":
