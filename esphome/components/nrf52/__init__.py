@@ -20,6 +20,7 @@ from esphome.components.zephyr.const import (
     BOOTLOADER_MCUBOOT,
     KEY_BOOTLOADER,
     KEY_ZEPHYR,
+    KEY_BOARD,
 )
 import esphome.config_validation as cv
 from esphome.const import (
@@ -58,6 +59,11 @@ CODEOWNERS = ["@tomaszduda23"]
 AUTO_LOAD = ["zephyr", "preferences"]
 IS_TARGET_PLATFORM = True
 _LOGGER = logging.getLogger(__name__)
+
+
+def set_platform(config: ConfigType) -> ConfigType:
+    CORE.data[KEY_CORE][KEY_TARGET_PLATFORM] = PLATFORM_NRF52
+    return config
 
 
 def set_core_data(config: ConfigType) -> ConfigType:
@@ -161,6 +167,7 @@ FRAMEWORK_SCHEMA = cv.All(
 
 
 CONFIG_SCHEMA = cv.All(
+    set_platform,
     cv.Schema(
         {
             cv.Required(CONF_BOARD): cv.string_strict,
@@ -210,9 +217,9 @@ FINAL_VALIDATE_SCHEMA = _final_validate
 @coroutine_with_priority(CoroPriority.PLATFORM)
 async def to_code(config: ConfigType) -> None:
     """Convert the configuration to code."""
-    cg.add_platformio_option("board", config[CONF_BOARD])
+    cg.add_platformio_option("board", zephyr_data()[KEY_BOARD])
     cg.add_build_flag("-DUSE_NRF52")
-    cg.add_define("ESPHOME_BOARD", config[CONF_BOARD])
+    cg.add_define("ESPHOME_BOARD", zephyr_data()[KEY_BOARD])
     cg.add_define("ESPHOME_VARIANT", "NRF52")
     # nRF52 processors are single-core
     cg.add_define(ThreadModel.SINGLE)
@@ -244,6 +251,8 @@ async def to_code(config: ConfigType) -> None:
         cg.add_platformio_option("board_upload.use_1200bps_touch", "true")
         cg.add_platformio_option("board_upload.require_upload_port", "true")
         cg.add_platformio_option("board_upload.wait_for_upload_port", "true")
+
+    zephyr_add_prj_conf("CONFIG_BUILD_OUTPUT_UF2", True)
 
     zephyr_setup_preferences()
     zephyr_to_code(config)
@@ -360,6 +369,53 @@ def get_download_types(storage_json: StorageJSON) -> list[dict[str, str]]:
     return types
 
 
+def _find_uf2_partitions():
+    import psutil
+
+    uf2_devices = {}
+    for partition in psutil.disk_partitions():
+        if "fstype" in partition and partition.fstype == "":
+            continue
+
+        mount_point = partition.mountpoint
+        device = partition.device
+
+        info_path = Path(mount_point) / "INFO_UF2.TXT"
+
+        try:
+            if info_path.is_file():
+                if device in uf2_devices:
+                    if len(uf2_devices[device]) > len(mount_point):
+                        uf2_devices[device] = mount_point
+                else:
+                    uf2_devices[device] = mount_point
+        except (OSError, PermissionError) as e:
+            continue
+
+    return list(uf2_devices.values())
+
+
+def _get_upload_host(config: ConfigType, host: str) -> str | None:
+    from esphome.__main__ import check_permissions, choose_prompt, get_port_type
+
+    if host == "swd":
+        return host
+    elif host == "uf2":
+        devices = _find_uf2_partitions()
+        if not devices:
+            return None
+        if len(devices) > 1:
+            host = choose_prompt([(d, d) for d in devices], purpose="upload")
+        else:
+            host = devices[0]
+        return host
+    elif get_port_type(host) == "SERIAL":
+        check_permissions(host)
+        return host
+    else:
+        return None
+
+
 def _upload_using_platformio(
     config: ConfigType, port: str, upload_args: list[str]
 ) -> int | str:
@@ -371,26 +427,22 @@ def _upload_using_platformio(
 
 
 def upload_program(config: ConfigType, args, host: str) -> bool:
-    from esphome.__main__ import check_permissions, get_port_type
-
     print(f"Uploading to nrf52 via {host} ({args=})")
 
-    result = 0
-    handled = False
+    pio_host = _get_upload_host(config, host)
+    if not pio_host:
+        return False
 
-    if get_port_type(host) == "SERIAL":
-        check_permissions(host)
-        result = _upload_using_platformio(config, host, ["-t", "flash_dfu"])
-        handled = True
-
-    if host == "PYOCD":
-        result = _upload_using_platformio(config, host, ["-t", "flash_pyocd"])
-        handled = True
+    result = _upload_using_platformio(
+        config,
+        pio_host,
+        ["-t", "upload"],
+    )
 
     if result != 0:
         raise EsphomeError(f"Upload failed with result: {result}")
 
-    return handled
+    return True
 
 
 def show_logs(config: ConfigType, args, devices: list[str]) -> bool:
