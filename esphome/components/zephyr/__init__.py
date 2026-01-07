@@ -72,6 +72,7 @@ def _zephyr_set_board_config(config):
         "url": "https://esphome.io/",
         "vendor": "esphome",
         "build": {},
+        "bootloader": config[KEY_BOOTLOADERS][0]["type"],
     }
 
 
