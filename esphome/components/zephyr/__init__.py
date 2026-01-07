@@ -1,17 +1,20 @@
+import json
 from pathlib import Path
 import textwrap
 from typing import TypedDict
 
+import yaml
+
 import esphome.codegen as cg
 import esphome.config_validation as cv
-import json
 from esphome.const import CONF_BOARD, KEY_CORE, KEY_FRAMEWORK_VERSION
 from esphome.core import CORE
 from esphome.helpers import copy_file_if_changed, write_file_if_changed
 
 from .const import (
+    CONF_BOARD_FULL,
     KEY_BOARD,
-    KEY_BOOTLOADER,
+    KEY_BOOTLOADERS,
     KEY_EXTRA_BUILD_FILES,
     KEY_OVERLAY,
     KEY_PM_STATIC,
@@ -35,18 +38,21 @@ class Section:
         self.end_address = self.address + self.size
 
     def __str__(self):
-        return (
-            f"{self.name}:\n"
-            f"  address: 0x{self.address:X}\n"
-            f"  end_address: 0x{self.end_address:X}\n"
-            f"  region: {self.region}\n"
-            f"  size: 0x{self.size:X}"
-        )
+        r = {
+            self.name: {
+                "region": self.region,
+                "size": self.size,
+                "address": self.address,
+                "end_address": self.end_address,
+            }
+        }
+        return yaml.dump(r).rstrip()
 
 
 class ZephyrData(TypedDict):
     board: str
     board_config: dict
+    bootloaders: list
     prj_conf: dict[str, tuple[PrjConfValueType, bool]]
     overlay: str
     extra_build_files: dict[str, Path]
@@ -57,7 +63,7 @@ class ZephyrData(TypedDict):
 def _zephyr_set_board_config(config):
     return {
         "frameworks": ["zephyr"],
-        "board_name": config[CONF_BOARD],
+        "board_name": config[CONF_BOARD_FULL],
         "name": "esphome nrf52",
         "upload": {
             "maximum_ram_size": 248832,
@@ -71,9 +77,9 @@ def _zephyr_set_board_config(config):
 
 def zephyr_set_core_data(config):
     CORE.data[KEY_ZEPHYR] = ZephyrData(
-        board=config[CONF_BOARD].split("/")[0],
+        board=config[CONF_BOARD],
         board_config=_zephyr_set_board_config(config),
-        bootloader=config[KEY_BOOTLOADER],
+        bootloaders=config[KEY_BOOTLOADERS],
         prj_conf={},
         overlay="",
         extra_build_files={},
@@ -189,7 +195,7 @@ def zephyr_add_cdc_acm(config, id):
     )
 
 
-def zephyr_add_pm_static(section: Section):
+def zephyr_add_pm_static(section: list[Section]):
     CORE.data[KEY_ZEPHYR][KEY_PM_STATIC].extend(section)
 
 

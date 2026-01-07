@@ -7,6 +7,7 @@ from pathlib import Path
 from esphome import pins
 import esphome.codegen as cg
 from esphome.components.zephyr import (
+    Section,
     copy_files as zephyr_copy_files,
     zephyr_add_overlay,
     zephyr_add_pm_static,
@@ -17,10 +18,10 @@ from esphome.components.zephyr import (
     zephyr_to_code,
 )
 from esphome.components.zephyr.const import (
-    BOOTLOADER_MCUBOOT,
-    KEY_BOOTLOADER,
-    KEY_ZEPHYR,
+    CONF_BOARD_FULL,
     KEY_BOARD,
+    KEY_BOOTLOADERS,
+    KEY_ZEPHYR,
 )
 import esphome.config_validation as cv
 from esphome.const import (
@@ -44,12 +45,14 @@ from esphome.core import CORE, CoroPriority, EsphomeError, coroutine_with_priori
 from esphome.storage_json import StorageJSON
 from esphome.types import ConfigType
 
-from .boards import BOARDS_ZEPHYR, BOOTLOADER_CONFIG
+from .boards import BOARDS_ZEPHYR
 from .const import (
     BOOTLOADER_ADAFRUIT,
     BOOTLOADER_ADAFRUIT_NRF52_SD132,
     BOOTLOADER_ADAFRUIT_NRF52_SD140_V6,
     BOOTLOADER_ADAFRUIT_NRF52_SD140_V7,
+    BOOTLOADER_MCUBOOT,
+    BOOTLOADER_NORDIC,
 )
 
 # force import gpio to register pin schema
@@ -67,9 +70,6 @@ def set_platform(config: ConfigType) -> ConfigType:
 
 
 def set_core_data(config: ConfigType) -> ConfigType:
-    # nrf-sdk v3.2.0 changed the name of this board
-    if config[CONF_BOARD] == "adafruit_itsybitsy_nrf52840":
-        config[CONF_BOARD] = "adafruit_itsybitsy"
     zephyr_set_core_data(config)
     CORE.data[KEY_CORE][KEY_TARGET_PLATFORM] = PLATFORM_NRF52
     CORE.data[KEY_CORE][KEY_TARGET_FRAMEWORK] = KEY_ZEPHYR
@@ -77,43 +77,17 @@ def set_core_data(config: ConfigType) -> ConfigType:
         config[CONF_FRAMEWORK][CONF_VERSION]
     )
 
-    if config[KEY_BOOTLOADER] in BOOTLOADER_CONFIG:
-        zephyr_add_pm_static(BOOTLOADER_CONFIG[config[KEY_BOOTLOADER]])
+    sections = _get_bootloader_partitions(config)
+    zephyr_add_pm_static(sections)
 
     return config
 
 
 BOOTLOADERS = [
     BOOTLOADER_ADAFRUIT,
-    BOOTLOADER_ADAFRUIT_NRF52_SD132,
-    BOOTLOADER_ADAFRUIT_NRF52_SD140_V6,
-    BOOTLOADER_ADAFRUIT_NRF52_SD140_V7,
     BOOTLOADER_MCUBOOT,
+    BOOTLOADER_NORDIC,
 ]
-
-
-def _detect_bootloader(config: ConfigType) -> ConfigType:
-    """Detect the bootloader for the given board."""
-    config = config.copy()
-    bootloaders: list[str] = []
-    board = config[CONF_BOARD]
-
-    if board in BOARDS_ZEPHYR and KEY_BOOTLOADER in BOARDS_ZEPHYR[board]:
-        # this board have bootloaders config available
-        bootloaders = BOARDS_ZEPHYR[board][KEY_BOOTLOADER]
-
-    if KEY_BOOTLOADER not in config:
-        if bootloaders:
-            # there is no bootloader in config -> take first one
-            config[KEY_BOOTLOADER] = bootloaders[0]
-        else:
-            # make mcuboot as default if there is no configuration for that board
-            config[KEY_BOOTLOADER] = BOOTLOADER_MCUBOOT
-    elif bootloaders and config[KEY_BOOTLOADER] not in bootloaders:
-        raise cv.Invalid(
-            f"{board} does not support {config[KEY_BOOTLOADER]}, select one of: {', '.join(bootloaders)}"
-        )
-    return config
 
 
 nrf52_ns = cg.esphome_ns.namespace("nrf52")
@@ -123,6 +97,13 @@ CONF_DFU = "dfu"
 CONF_DCDC = "dcdc"
 CONF_REG0 = "reg0"
 CONF_UICR_ERASE = "uicr_erase"
+CONF_TYPE = "type"
+CONF_SOFTDEVICE_VERSION = "softdevice_version"
+CONF_SOFTDEVICE_MODEL = "softdevice_model"
+CONF_FLASH_START_SIZE = "flash_start_size"
+CONF_FLASH_END_SIZE = "flash_end_size"
+CONF_BOOTLOADERS = "bootloaders"
+CONF_BOOTLOADER = "bootloader"
 
 VOLTAGE_LEVELS = [1.8, 2.1, 2.4, 2.7, 3.0, 3.3]
 
@@ -166,12 +147,170 @@ FRAMEWORK_SCHEMA = cv.All(
 )
 
 
+def _validate_bootloader(config: ConfigType) -> ConfigType:
+    btype = config.get(CONF_TYPE)
+
+    if btype == "adafruit":
+        if not all(
+            (CONF_SOFTDEVICE_MODEL in config, CONF_SOFTDEVICE_VERSION in config)
+        ):
+            raise cv.Invalid(
+                "Adafruit bootloader requires both 'softdevice_model' and 'softdevice_version' to be set. You can find them in INFO_UF2.TXT"
+            )
+        if not config[CONF_FLASH_START_SIZE]:
+            sd_ver = config[CONF_SOFTDEVICE_VERSION]
+            sd_model = config[CONF_SOFTDEVICE_MODEL]
+            if sd_model == 140 and sd_ver == 7:
+                config[CONF_FLASH_START_SIZE] = 0x27000
+            elif sd_ver == 6 and sd_model in (132, 140):
+                config[CONF_FLASH_START_SIZE] = 0x26000
+            else:
+                config[CONF_FLASH_START_SIZE] = 0x19000
+        if not config[CONF_FLASH_END_SIZE]:
+            config[CONF_FLASH_END_SIZE] = 0xC000
+    elif btype == "nordic":
+        if not config[CONF_FLASH_START_SIZE]:
+            config[CONF_FLASH_START_SIZE] = 0x1000
+        if not config[CONF_FLASH_END_SIZE]:
+            config[CONF_FLASH_END_SIZE] = 0x20000
+
+    return config
+
+
+def _get_default_bootloader_for_board(config: ConfigType) -> str:
+    print(f"Getting default bootloader for board {config[CONF_BOARD]}")
+    if config[CONF_BOARD] in BOARDS_ZEPHYR:
+        return BOARDS_ZEPHYR[config[CONF_BOARD]]
+    if "adafruit" in config[CONF_BOARD].lower():
+        _LOGGER.warning(
+            "Assuming Adafruit bootloader SoftDevice S140 V6 for Adafruit board. Check if this is correct and set manually if needed"
+        )
+        return BOOTLOADER_ADAFRUIT_NRF52_SD140_V6
+    return BOOTLOADER_MCUBOOT
+
+
+def _validate_bootloaders(config: ConfigType) -> ConfigType:
+    if all((CONF_BOOTLOADERS in config, CONF_BOOTLOADER in config)):
+        raise cv.Invalid(
+            f"Cannot specify both '{CONF_BOOTLOADERS}' and '{CONF_BOOTLOADER}'"
+        )
+    if CONF_BOOTLOADERS not in config:
+        config[CONF_BOOTLOADERS] = [
+            config.get(
+                CONF_BOOTLOADER,
+                _parse_shorthand_bootloader(_get_default_bootloader_for_board(config)),
+            )
+        ]
+    if len(config[CONF_BOOTLOADERS]) > 1:
+        raise cv.Invalid("Multiple bootloaders are not supported yet.")
+    return config
+
+
+def _parse_shorthand_bootloader(value: str) -> ConfigType:
+    if value.startswith("adafruit"):
+        if value == BOOTLOADER_ADAFRUIT_NRF52_SD132:
+            return {
+                CONF_TYPE: BOOTLOADER_ADAFRUIT,
+                CONF_SOFTDEVICE_MODEL: 132,
+                CONF_SOFTDEVICE_VERSION: 6,
+                CONF_FLASH_START_SIZE: 0x26000,
+                CONF_FLASH_END_SIZE: 0xC000,
+            }
+        if value == BOOTLOADER_ADAFRUIT_NRF52_SD140_V6:
+            return {
+                CONF_TYPE: BOOTLOADER_ADAFRUIT,
+                CONF_SOFTDEVICE_MODEL: 140,
+                CONF_SOFTDEVICE_VERSION: 6,
+                CONF_FLASH_START_SIZE: 0x26000,
+                CONF_FLASH_END_SIZE: 0xC000,
+            }
+        if value == BOOTLOADER_ADAFRUIT_NRF52_SD140_V7:
+            return {
+                CONF_TYPE: BOOTLOADER_ADAFRUIT,
+                CONF_SOFTDEVICE_MODEL: 140,
+                CONF_SOFTDEVICE_VERSION: 7,
+                CONF_FLASH_START_SIZE: 0x27000,
+                CONF_FLASH_END_SIZE: 0xC000,
+            }
+        return {CONF_TYPE: BOOTLOADER_ADAFRUIT}
+    if value == BOOTLOADER_NORDIC:
+        return {
+            CONF_TYPE: BOOTLOADER_NORDIC,
+            CONF_FLASH_START_SIZE: 0x1000,
+            CONF_FLASH_END_SIZE: 0x20000,
+        }
+    if value == BOOTLOADER_MCUBOOT:
+        return {
+            CONF_TYPE: BOOTLOADER_MCUBOOT,
+            CONF_FLASH_START_SIZE: 0x0,
+            CONF_FLASH_END_SIZE: 0x0,
+        }
+    raise cv.Invalid(f"Unknown bootloader shorthand: {value}")
+
+
+def _get_bootloader_partitions(config: ConfigType) -> list[Section]:
+    sections = []
+    bootloader = config[CONF_BOOTLOADERS][0]
+    if bootloader[CONF_FLASH_START_SIZE] > 0:
+        sections.append(
+            Section(
+                (
+                    "nrf5_mbr"
+                    if bootloader[CONF_TYPE] == BOOTLOADER_NORDIC
+                    else "bootloader_start_reserved"
+                ),
+                size=bootloader[CONF_FLASH_START_SIZE],
+                region="flash_primary",
+                address=0x0,
+            )
+        )
+    if bootloader[CONF_FLASH_END_SIZE] > 0:
+        sections.append(
+            Section(
+                "bootloader_end_reserved",
+                size=bootloader[CONF_FLASH_END_SIZE],
+                region="flash_primary",
+                address=0x100000 - bootloader[CONF_FLASH_END_SIZE],
+            )
+        )
+    return sections
+
+
+BOOTLOADER_SCHEMA = cv.All(
+    cv.Any(
+        cv.All(cv.string_strict, _parse_shorthand_bootloader),
+        cv.Schema(
+            {
+                cv.Required(CONF_TYPE): cv.one_of(*BOOTLOADERS, lower=True),
+                cv.Optional(CONF_SOFTDEVICE_VERSION): cv.one_of(6, 7),
+                cv.Optional(CONF_SOFTDEVICE_MODEL): cv.one_of(112, 132, 140),
+                cv.Optional(CONF_FLASH_START_SIZE, default=0x0): cv.hex_int,
+                cv.Optional(CONF_FLASH_END_SIZE, default=0x0): cv.hex_int,
+            }
+        ),
+    ),
+    _validate_bootloader,
+)
+
+
+def _parse_board_config(config: ConfigType) -> ConfigType:
+    """Add full board name to config based on CONF_BOARD."""
+
+    # Store the full board name (use BOARDS_ZEPHYR if available as reference)
+    config[CONF_BOARD_FULL] = config[CONF_BOARD]
+    config[CONF_BOARD] = config[CONF_BOARD].split("/")[0]
+    return config
+
+
 CONFIG_SCHEMA = cv.All(
     set_platform,
+    _parse_board_config,
     cv.Schema(
         {
             cv.Required(CONF_BOARD): cv.string_strict,
-            cv.Optional(KEY_BOOTLOADER): cv.one_of(*BOOTLOADERS, lower=True),
+            cv.Optional(CONF_BOARD_FULL): cv.string_strict,
+            cv.Optional(CONF_BOOTLOADER): BOOTLOADER_SCHEMA,
+            cv.Optional(CONF_BOOTLOADERS): cv.ensure_list(BOOTLOADER_SCHEMA),
             cv.Optional(CONF_DFU): cv.Schema(
                 {
                     cv.GenerateID(): cv.declare_id(DeviceFirmwareUpdate),
@@ -191,24 +330,20 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_FRAMEWORK, default={}): FRAMEWORK_SCHEMA,
         }
     ),
-    _detect_bootloader,
+    _validate_bootloaders,
     set_core_data,
 )
 
 
 def _validate_mcumgr(config):
-    bootloader = zephyr_data()[KEY_BOOTLOADER]
-    if bootloader == BOOTLOADER_MCUBOOT:
+    bootloader = zephyr_data()[KEY_BOOTLOADERS][0]
+    if bootloader[CONF_TYPE] not in (BOOTLOADER_ADAFRUIT, BOOTLOADER_NORDIC):
         raise cv.Invalid(f"'{bootloader}' bootloader does not support DFU")
 
 
 def _final_validate(config):
     if CONF_DFU in config:
         _validate_mcumgr(config)
-    if config[KEY_BOOTLOADER] == BOOTLOADER_ADAFRUIT:
-        _LOGGER.warning(
-            "Selected generic Adafruit bootloader. The board might crash. Consider settings `bootloader:`"
-        )
 
 
 FINAL_VALIDATE_SCHEMA = _final_validate
@@ -235,24 +370,11 @@ async def to_code(config: ConfigType) -> None:
             conf[CONF_COMPONENTS],
         )
 
-    if config[KEY_BOOTLOADER] == BOOTLOADER_MCUBOOT:
-        cg.add_define("USE_BOOTLOADER_MCUBOOT")
-    else:
-        if "_sd" in config[KEY_BOOTLOADER]:
-            bootloader = config[KEY_BOOTLOADER].split("_")
-            sd_id = bootloader[2][2:]
-            cg.add_define("USE_SOFTDEVICE_ID", int(sd_id))
-            if (len(bootloader)) > 3:
-                sd_version = bootloader[3][1:]
-                cg.add_define("USE_SOFTDEVICE_VERSION", int(sd_version))
-        # make sure that firmware.zip is created
-        # for Adafruit_nRF52_Bootloader
-        cg.add_platformio_option("board_upload.protocol", "nrfutil")
-        cg.add_platformio_option("board_upload.use_1200bps_touch", "true")
-        cg.add_platformio_option("board_upload.require_upload_port", "true")
-        cg.add_platformio_option("board_upload.wait_for_upload_port", "true")
-
-    zephyr_add_prj_conf("CONFIG_BUILD_OUTPUT_UF2", True)
+    bootloader = config[CONF_BOOTLOADERS][0]
+    if bootloader[CONF_TYPE] == BOOTLOADER_MCUBOOT:
+        zephyr_add_prj_conf("CONFIG_BOOTLOADER_MCUBOOT", True)
+    elif bootloader[CONF_TYPE] == BOOTLOADER_ADAFRUIT:
+        zephyr_add_prj_conf("CONFIG_BUILD_OUTPUT_UF2", True)
 
     zephyr_setup_preferences()
     zephyr_to_code(config)
@@ -389,7 +511,7 @@ def _find_uf2_partitions():
                         uf2_devices[device] = mount_point
                 else:
                     uf2_devices[device] = mount_point
-        except (OSError, PermissionError) as e:
+        except (OSError, PermissionError):
             continue
 
     return list(uf2_devices.values())
@@ -400,7 +522,7 @@ def _get_upload_host(config: ConfigType, host: str) -> str | None:
 
     if host == "swd":
         return host
-    elif host == "uf2":
+    if host == "uf2":
         devices = _find_uf2_partitions()
         if not devices:
             return None
@@ -409,11 +531,10 @@ def _get_upload_host(config: ConfigType, host: str) -> str | None:
         else:
             host = devices[0]
         return host
-    elif get_port_type(host) == "SERIAL":
+    if get_port_type(host) == "SERIAL":
         check_permissions(host)
         return host
-    else:
-        return None
+    return None
 
 
 def _upload_using_platformio(
