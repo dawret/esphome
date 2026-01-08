@@ -9,10 +9,10 @@ from esphome import pins
 import esphome.codegen as cg
 from esphome.components.zephyr import (
     copy_files as zephyr_copy_files,
-    zephyr_add_overlay,
     zephyr_add_pm_static,
     zephyr_add_prj_conf,
     zephyr_data,
+    zephyr_overlay,
     zephyr_set_core_data,
     zephyr_setup_preferences,
     zephyr_to_code,
@@ -253,8 +253,6 @@ async def to_code(config: ConfigType) -> None:
         cg.add_platformio_option("board_upload.require_upload_port", "true")
         cg.add_platformio_option("board_upload.wait_for_upload_port", "true")
 
-    zephyr_add_prj_conf("CONFIG_BUILD_OUTPUT_UF2", True)
-
     zephyr_setup_preferences()
     zephyr_to_code(config)
 
@@ -264,12 +262,9 @@ async def to_code(config: ConfigType) -> None:
     if framework_ver < cv.Version(3, 2, 0):
         zephyr_add_prj_conf("BOARD_ENABLE_DCDC", config[CONF_DCDC])
     else:
-        zephyr_add_overlay(
-            f"""
-                &reg1 {{
-                    regulator-initial-mode = <{"NRF5X_REG_MODE_DCDC" if config[CONF_DCDC] else "NRF5X_REG_MODE_LDO"}>;
-                }};
-            """
+        zephyr_overlay().node("reg1").add_property(
+            "regulator-initial-mode",
+            f"<{'NRF5X_REG_MODE_DCDC' if config[CONF_DCDC] else 'NRF5X_REG_MODE_LDO'}>",
         )
 
     if reg0_config := config.get(CONF_REG0):
@@ -296,13 +291,7 @@ async def to_code(config: ConfigType) -> None:
     if framework_ver < cv.Version(3, 2, 0):
         zephyr_add_prj_conf("NFCT_PINS_AS_GPIOS", True)
     else:
-        zephyr_add_overlay(
-            f"""
-                &reg1 {{
-                    regulator-initial-mode = <{"NRF5X_REG_MODE_DCDC" if config[CONF_DCDC] else "NRF5X_REG_MODE_LDO"}>;
-                }};
-            """
-        )
+        zephyr_overlay().node("uicr").add_property("nfct-pins-as-gpios")
 
 
 @coroutine_with_priority(CoroPriority.DIAGNOSTICS)
