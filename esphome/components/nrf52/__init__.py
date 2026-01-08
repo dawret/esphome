@@ -108,6 +108,20 @@ CONF_BOOTLOADER = "bootloader"
 
 VOLTAGE_LEVELS = [1.8, 2.1, 2.4, 2.7, 3.0, 3.3]
 
+# Adafruit bootloader flash partition sizes
+ADAFRUIT_FLASH_START_SIZE_SD140_V7 = 0x27000
+ADAFRUIT_FLASH_START_SIZE_SD140_V6_SD132 = 0x26000
+ADAFRUIT_FLASH_START_SIZE_DEFAULT = 0x19000
+ADAFRUIT_FLASH_END_SIZE = 0xC000
+
+# Nordic bootloader flash partition sizes
+NORDIC_FLASH_START_SIZE = 0x1000
+NORDIC_FLASH_END_SIZE = 0x20000
+
+# MCUboot flash partition sizes (no reserved regions)
+MCUBOOT_FLASH_START_SIZE = 0x0
+MCUBOOT_FLASH_END_SIZE = 0x0
+
 PLATFORM_RECOMMENDED_SOURCE = (
     "https://github.com/dawret/platform-nordicnrf52/archive/refs/tags/v11.1.1.tar.gz"
 )
@@ -162,18 +176,18 @@ def _validate_bootloader(config: ConfigType) -> ConfigType:
             sd_ver = config[CONF_SOFTDEVICE_VERSION]
             sd_model = config[CONF_SOFTDEVICE_MODEL]
             if sd_model == 140 and sd_ver == 7:
-                config[CONF_FLASH_START_SIZE] = 0x27000
+                config[CONF_FLASH_START_SIZE] = ADAFRUIT_FLASH_START_SIZE_SD140_V7
             elif sd_ver == 6 and sd_model in (132, 140):
-                config[CONF_FLASH_START_SIZE] = 0x26000
+                config[CONF_FLASH_START_SIZE] = ADAFRUIT_FLASH_START_SIZE_SD140_V6_SD132
             else:
-                config[CONF_FLASH_START_SIZE] = 0x19000
+                config[CONF_FLASH_START_SIZE] = ADAFRUIT_FLASH_START_SIZE_DEFAULT
         if not config[CONF_FLASH_END_SIZE]:
-            config[CONF_FLASH_END_SIZE] = 0xC000
+            config[CONF_FLASH_END_SIZE] = ADAFRUIT_FLASH_END_SIZE
     elif btype == "nordic":
         if not config[CONF_FLASH_START_SIZE]:
-            config[CONF_FLASH_START_SIZE] = 0x1000
+            config[CONF_FLASH_START_SIZE] = NORDIC_FLASH_START_SIZE
         if not config[CONF_FLASH_END_SIZE]:
-            config[CONF_FLASH_END_SIZE] = 0x20000
+            config[CONF_FLASH_END_SIZE] = NORDIC_FLASH_END_SIZE
 
     return config
 
@@ -214,37 +228,37 @@ def _parse_shorthand_bootloader(value: str) -> ConfigType:
                 CONF_TYPE: BOOTLOADER_ADAFRUIT,
                 CONF_SOFTDEVICE_MODEL: 132,
                 CONF_SOFTDEVICE_VERSION: 6,
-                CONF_FLASH_START_SIZE: 0x26000,
-                CONF_FLASH_END_SIZE: 0xC000,
+                CONF_FLASH_START_SIZE: ADAFRUIT_FLASH_START_SIZE_SD140_V6_SD132,
+                CONF_FLASH_END_SIZE: ADAFRUIT_FLASH_END_SIZE,
             }
         if value == BOOTLOADER_ADAFRUIT_NRF52_SD140_V6:
             return {
                 CONF_TYPE: BOOTLOADER_ADAFRUIT,
                 CONF_SOFTDEVICE_MODEL: 140,
                 CONF_SOFTDEVICE_VERSION: 6,
-                CONF_FLASH_START_SIZE: 0x26000,
-                CONF_FLASH_END_SIZE: 0xC000,
+                CONF_FLASH_START_SIZE: ADAFRUIT_FLASH_START_SIZE_SD140_V6_SD132,
+                CONF_FLASH_END_SIZE: ADAFRUIT_FLASH_END_SIZE,
             }
         if value == BOOTLOADER_ADAFRUIT_NRF52_SD140_V7:
             return {
                 CONF_TYPE: BOOTLOADER_ADAFRUIT,
                 CONF_SOFTDEVICE_MODEL: 140,
                 CONF_SOFTDEVICE_VERSION: 7,
-                CONF_FLASH_START_SIZE: 0x27000,
-                CONF_FLASH_END_SIZE: 0xC000,
+                CONF_FLASH_START_SIZE: ADAFRUIT_FLASH_START_SIZE_SD140_V7,
+                CONF_FLASH_END_SIZE: ADAFRUIT_FLASH_END_SIZE,
             }
         return {CONF_TYPE: BOOTLOADER_ADAFRUIT}
     if value == BOOTLOADER_NORDIC:
         return {
             CONF_TYPE: BOOTLOADER_NORDIC,
-            CONF_FLASH_START_SIZE: 0x1000,
-            CONF_FLASH_END_SIZE: 0x20000,
+            CONF_FLASH_START_SIZE: NORDIC_FLASH_START_SIZE,
+            CONF_FLASH_END_SIZE: NORDIC_FLASH_END_SIZE,
         }
     if value == BOOTLOADER_MCUBOOT:
         return {
             CONF_TYPE: BOOTLOADER_MCUBOOT,
-            CONF_FLASH_START_SIZE: 0x0,
-            CONF_FLASH_END_SIZE: 0x0,
+            CONF_FLASH_START_SIZE: MCUBOOT_FLASH_START_SIZE,
+            CONF_FLASH_END_SIZE: MCUBOOT_FLASH_END_SIZE,
         }
     raise cv.Invalid(f"Unknown bootloader shorthand: {value}")
 
