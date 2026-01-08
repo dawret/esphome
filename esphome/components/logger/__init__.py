@@ -25,8 +25,8 @@ from esphome.components.libretiny.const import (
 )
 from esphome.components.zephyr import (
     zephyr_add_cdc_acm,
-    zephyr_add_overlay,
     zephyr_add_prj_conf,
+    zephyr_overlay,
 )
 from esphome.config_helpers import filter_source_files_from_platform
 import esphome.config_validation as cv
@@ -410,9 +410,9 @@ async def to_code(config):
 
     if CORE.is_nrf52:
         if config[CONF_HARDWARE_UART] == UART0:
-            zephyr_add_overlay("""&uart0 { status = "okay";};""")
+            zephyr_overlay().node("uart0").add_property("status", '"okay"')
         if config[CONF_HARDWARE_UART] == UART1:
-            zephyr_add_overlay("""&uart1 { status = "okay";};""")
+            zephyr_overlay().node("uart1").add_property("status", '"okay"')
         if config[CONF_HARDWARE_UART] == USB_CDC:
             zephyr_add_prj_conf("UART_LINE_CTRL", True)
             zephyr_add_cdc_acm(config, 0)

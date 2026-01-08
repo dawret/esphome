@@ -4,11 +4,7 @@ import esphome.codegen as cg
 from esphome.components import sensor, voltage_sampler
 from esphome.components.esp32 import get_esp32_variant
 from esphome.components.nrf52.const import AIN_TO_GPIO, EXTRA_ADC
-from esphome.components.zephyr import (
-    zephyr_add_overlay,
-    zephyr_add_prj_conf,
-    zephyr_add_user,
-)
+from esphome.components.zephyr import zephyr_add_prj_conf, zephyr_overlay
 from esphome.config_helpers import filter_source_files_from_platform
 import esphome.config_validation as cv
 from esphome.const import (
@@ -157,25 +153,22 @@ async def to_code(config):
         if isinstance(pin_number, int):
             GPIO_TO_AIN = {v: k for k, v in AIN_TO_GPIO.items()}
             pin_number = GPIO_TO_AIN[pin_number]
-        zephyr_add_user("io-channels", f"<&adc {channel_id}>")
-        zephyr_add_overlay(
+        zephyr_overlay().add_user("io-channels", f"<&adc {channel_id}>")
+        adc = zephyr_overlay().node("adc")
+        adc.add_entry(
+            f"channel@{channel_id}",
             f"""
-&adc {{
-    #address-cells = <1>;
-    #size-cells = <0>;
-
-    channel@{channel_id} {{
-        reg = <{channel_id}>;
-        zephyr,gain = "{gain}";
-        zephyr,reference = "ADC_REF_INTERNAL";
-        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
-        zephyr,input-positive = <NRF_SAADC_{pin_number}>;
-        zephyr,resolution = <14>;
-        zephyr,oversampling = <8>;
-    }};
-}};
-"""
+                reg = <{channel_id}>;
+                zephyr,gain = "{gain}";
+                zephyr,reference = "ADC_REF_INTERNAL";
+                zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+                zephyr,input-positive = <NRF_SAADC_{pin_number}>;
+                zephyr,resolution = <14>;
+                zephyr,oversampling = <8>;
+            """,
         )
+        adc.add_property("#address-cells", "<1>")
+        adc.add_property("#size-cells", "<0>")
 
 
 FILTER_SOURCE_FILES = filter_source_files_from_platform(
