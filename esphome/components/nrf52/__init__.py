@@ -32,6 +32,7 @@ from esphome.const import (
     CONF_NAME,
     CONF_RESET_PIN,
     CONF_SOURCE,
+    CONF_TYPE,
     CONF_VERSION,
     CONF_VOLTAGE,
     KEY_CORE,
@@ -97,7 +98,6 @@ CONF_DFU = "dfu"
 CONF_DCDC = "dcdc"
 CONF_REG0 = "reg0"
 CONF_UICR_ERASE = "uicr_erase"
-CONF_TYPE = "type"
 CONF_SOFTDEVICE_VERSION = "softdevice_version"
 CONF_SOFTDEVICE_MODEL = "softdevice_model"
 CONF_FLASH_START_SIZE = "flash_start_size"
