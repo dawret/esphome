@@ -19,7 +19,6 @@ from .const import (
     KEY_OVERLAY,
     KEY_PM_STATIC,
     KEY_PRJ_CONF,
-    KEY_USER,
     KEY_ZEPHYR,
     zephyr_ns,
 )
@@ -49,15 +48,113 @@ class Section:
         return yaml.dump(r).rstrip()
 
 
+class ZephyrOverlayNode:
+    name: str
+    properties: dict[str, set[str]]
+    children: dict[str, str]
+
+    def __init__(self, name: str):
+        self.name = name
+        self.properties = {}
+        self.children = {}
+
+    def add_property(
+        self, name: str, val: str | None = None, unique: bool = False
+    ) -> None:
+        """
+        Add a property to a dt node in the following format:
+        No value:
+        name;
+        Multiple values:
+        name = val1, val2, ... valN;
+        If unique is True, raises an error if the property already exists.
+        """
+        if name not in self.properties:
+            self.properties[name] = set()
+        elif unique:
+            raise ValueError(
+                f"Overlay node '{self.name}' already has property '{name}'"
+            )
+
+        if val:
+            self.properties[name].update([val.strip()])
+
+    def add_entry(self, name: str, val: str, label: str|None = None) -> None:
+        """
+        Add an entry to a dt node in the following format:
+        label: name { val };
+        """
+        if name in self.children:
+            raise ValueError(f"Overlay node '{self.name}' already has entry '{name}'")
+        entry = f"{label}: {name}" if label else name
+        entry += f" {{{textwrap.dedent(val).strip()}}};\n"
+        self.children[name] = entry
+
+    def __str__(self) -> str:
+        if not self.properties and not self.children:
+            return ""
+        entry = ""
+        for name, vals in self.properties.items():
+            if len(vals) == 0:
+                entry += f"{name};\n"
+            else:
+                entry += f"{name} = {', '.join(list(vals))};\n"
+        for name, val in self.children.items():
+            entry += val
+        return entry
+
+
+class ZephyrOverlay:
+    root: dict[str, ZephyrOverlayNode]
+    labels: dict[str, ZephyrOverlayNode]
+
+    def __init__(self):
+        self.root = {
+            "chosen": ZephyrOverlayNode("chosen"),
+            "aliases": ZephyrOverlayNode("aliases"),
+            "zephyr,user": ZephyrOverlayNode("zephyr,user"),
+        }
+        self.labels = {}
+
+    def root_node(self, name: str) -> ZephyrOverlayNode:
+        if name not in self.root:
+            self.root[name] = ZephyrOverlayNode(name)
+        return self.root[name]
+
+    def node(self, name: str) -> ZephyrOverlayNode:
+        if name not in self.labels:
+            self.labels[name] = ZephyrOverlayNode(name)
+        return self.labels[name]
+
+    def add_chosen(self, name: str, val: str | None) -> None:
+        self.root_node("chosen").add_property(name, val, unique=True)
+
+    def add_alias(self, name: str, val: str | None) -> None:
+        self.root_node("aliases").add_property(name, val, unique=True)
+
+    def add_user(self, name: str, val: str | None) -> None:
+        self.root_node("zephyr,user").add_property(name, val)
+
+    def __str__(self) -> str:
+        out = ""
+        root_node = ""
+        for name, node in self.root.items():
+            root_node += f"{name} {{\n{textwrap.indent(str(node), ' ' * 4)}}};\n"
+        if root_node != "":
+            out += f"/ {{\n{textwrap.indent(root_node, ' ' * 4)}}};\n"
+        for name, label in self.labels.items():
+            out += f"&{name} {{\n{textwrap.indent(str(label), ' ' * 4)}}};\n"
+        return out
+
+
 class ZephyrData(TypedDict):
     board: str
     board_config: dict
     bootloaders: list
     prj_conf: dict[str, tuple[PrjConfValueType, bool]]
-    overlay: str
+    overlay: ZephyrOverlay
     extra_build_files: dict[str, Path]
     pm_static: list[Section]
-    user: dict[str, list[str]]
 
 
 def _zephyr_set_board_config(config):
@@ -82,16 +179,19 @@ def zephyr_set_core_data(config):
         board_config=_zephyr_set_board_config(config),
         bootloaders=config[KEY_BOOTLOADERS],
         prj_conf={},
-        overlay="",
+        overlay=ZephyrOverlay(),
         extra_build_files={},
         pm_static=[],
-        user={},
     )
     return config
 
 
 def zephyr_data() -> ZephyrData:
     return CORE.data[KEY_ZEPHYR]
+
+
+def zephyr_overlay() -> ZephyrOverlay:
+    return zephyr_data()[KEY_OVERLAY]
 
 
 def zephyr_add_prj_conf(
@@ -111,10 +211,6 @@ def zephyr_add_prj_conf(
         )
     if required:
         prj_conf[name] = (value, required)
-
-
-def zephyr_add_overlay(content):
-    zephyr_data()[KEY_OVERLAY] += textwrap.dedent(content)
 
 
 def add_extra_build_file(filename: str, path: Path) -> bool:
@@ -185,14 +281,9 @@ def zephyr_add_cdc_acm(config, id):
     zephyr_add_prj_conf("USB_DEVICE_REMOTE_WAKEUP", False)
     # prevent logging when buffer is full
     zephyr_add_prj_conf("USB_CDC_ACM_LOG_LEVEL_WRN", True)
-    zephyr_add_overlay(
-        f"""
-&zephyr_udc0 {{
-    cdc_acm_uart{id}: cdc_acm_uart{id} {{
-        compatible = "zephyr,cdc-acm-uart";
-    }};
-}};
-"""
+    zephyr_overlay().node("zephyr_udc0").add_entry(
+        f"cdc_acm_uart{id}",
+        'compatible = "zephyr,cdc-acm-uart";',
     )
 
 
@@ -200,25 +291,7 @@ def zephyr_add_pm_static(section: list[Section]):
     CORE.data[KEY_ZEPHYR][KEY_PM_STATIC].extend(section)
 
 
-def zephyr_add_user(key, value):
-    user = zephyr_data()[KEY_USER]
-    if key not in user:
-        user[key] = []
-    user[key] += [value]
-
-
 def copy_files():
-    user = zephyr_data()[KEY_USER]
-    if user:
-        zephyr_add_overlay(
-            f"""
-/ {{
-    zephyr,user {{
-        {[f"{key} = {', '.join(value)};" for key, value in user.items()][0]}
-}};
-}};"""
-        )
-
     want_opts = zephyr_data()[KEY_PRJ_CONF]
 
     prj_conf = (
@@ -233,7 +306,7 @@ def copy_files():
 
     write_file_if_changed(
         CORE.relative_build_path("zephyr/app.overlay"),
-        zephyr_data()[KEY_OVERLAY],
+        str(zephyr_data()[KEY_OVERLAY]),
     )
 
     write_file_if_changed(
