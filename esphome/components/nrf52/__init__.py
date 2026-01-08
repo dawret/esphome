@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
+import textwrap
 
 from esphome import pins
 import esphome.codegen as cg
@@ -108,7 +109,7 @@ CONF_BOOTLOADER = "bootloader"
 VOLTAGE_LEVELS = [1.8, 2.1, 2.4, 2.7, 3.0, 3.3]
 
 PLATFORM_RECOMMENDED_SOURCE = (
-    "https://github.com/dawret/platform-nordicnrf52/archive/refs/tags/v11.0.0.tar.gz"
+    "https://github.com/dawret/platform-nordicnrf52/archive/refs/tags/v11.1.1.tar.gz"
 )
 PLATFORM_RECOMMENDED_SDK_VERSION = "3.2.0"
 
@@ -444,49 +445,67 @@ def copy_files() -> None:
 def get_download_types(storage_json: StorageJSON) -> list[dict[str, str]]:
     """Get the download types for the firmware."""
     types = []
-    UF2_PATH = "zephyr/zephyr.uf2"
-    DFU_PATH = "firmware.zip"
-    HEX_PATH = "zephyr/zephyr.hex"
-    HEX_MERGED_PATH = "zephyr/merged.hex"
+    UF2_PATH = "merged.uf2"
+    DFU_PATH = "merged.zip"
+    HEX_PATH = "merged.hex"
     APP_IMAGE_PATH = "zephyr/app_update.bin"
     build_dir = Path(storage_json.firmware_bin_path).parent
     if (build_dir / UF2_PATH).is_file():
         types = [
             {
                 "title": "UF2 package (recommended)",
-                "description": "For flashing via Adafruit nRF52 Bootloader as a flash drive.",
+                "description": textwrap.dedent(
+                    """\
+                    For flashing via Adafruit nRF52 Bootloader as a flash drive.
+
+                    To flash, either copy the UF2 file to the mounted drive,
+                    or run esphome upload --host [uf2|<drive_path>] <config.yaml>.
+                    When using --host uf2, the drive will be auto-detected.
+                """
+                ),
                 "file": UF2_PATH,
                 "download": f"{storage_json.name}.uf2",
-            },
+            }
+        ]
+    if (build_dir / DFU_PATH).is_file():
+        types += [
             {
                 "title": "DFU package",
-                "description": "For flashing via adafruit-nrfutil using USB CDC.",
+                "description": textwrap.dedent(
+                    """\
+                    For flashing via adafruit-nrfutil or nordic-nrfutil using USB CDC.
+
+                    To flash, run esphome upload <config.yaml> or esphome upload --host <serial_port> <config.yaml>.
+                """
+                ),
                 "file": DFU_PATH,
                 "download": f"dfu-{storage_json.name}.zip",
             },
         ]
-    else:
-        types = [
+    if (build_dir / HEX_PATH).is_file():
+        types += [
             {
                 "title": "HEX package",
-                "description": "For flashing via pyocd using SWD.",
-                "file": (
-                    HEX_MERGED_PATH
-                    if (build_dir / HEX_MERGED_PATH).is_file()
-                    else HEX_PATH
+                "description": textwrap.dedent(
+                    """\
+                    For flashing via pyocd using SWD.
+
+                    To flash, run esphome upload --host swd <config.yaml>.
+                """
                 ),
+                "file": (HEX_PATH),
                 "download": f"{storage_json.name}.hex",
             },
         ]
-        if (build_dir / APP_IMAGE_PATH).is_file():
-            types += [
-                {
-                    "title": "App update package",
-                    "description": "For flashing via mcumgr-web using BLE or smpclient using USB CDC.",
-                    "file": APP_IMAGE_PATH,
-                    "download": f"app-{storage_json.name}.img",
-                },
-            ]
+    if (build_dir / APP_IMAGE_PATH).is_file():
+        types += [
+            {
+                "title": "App update package",
+                "description": "For flashing via mcumgr-web using BLE or smpclient using USB CDC.",
+                "file": APP_IMAGE_PATH,
+                "download": f"app-{storage_json.name}.img",
+            },
+        ]
 
     return types
 
