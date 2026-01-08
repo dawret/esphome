@@ -11,11 +11,11 @@ from esphome.components.zephyr import (
     Section,
     copy_files as zephyr_copy_files,
     zephyr_add_conf,
-    zephyr_add_overlay,
     zephyr_add_pm_static,
     zephyr_add_prj_conf,
     zephyr_add_sysbuild_conf,
     zephyr_data,
+    zephyr_overlay,
     zephyr_set_core_data,
     zephyr_setup_preferences,
     zephyr_to_code,
@@ -410,7 +410,8 @@ async def to_code(config: ConfigType) -> None:
     zephyr_add_conf(Path("sysbuild/mcuboot.conf"), "MCUBOOT_SERIAL", False)
 
     if config[CONF_BOARD] == "xiao_ble":
-        zephyr_add_overlay(
+        zephyr_overlay().node("flash0").add_entry(
+            "partitions",
             textwrap.dedent(
                 """
                 &flash0 {
@@ -419,7 +420,6 @@ async def to_code(config: ConfigType) -> None:
                         compatible = "fixed-partitions";
                         #address-cells = <1>;
                         #size-cells = <1>;
-
 
                         slot0_partition: partition@c000 {
                             label = "image-0";
@@ -432,7 +432,7 @@ async def to_code(config: ConfigType) -> None:
                     };
                 };
                 """
-            )
+            ),
         )
 
     zephyr_setup_preferences()
@@ -444,12 +444,9 @@ async def to_code(config: ConfigType) -> None:
     if framework_ver < cv.Version(2, 9, 2):
         zephyr_add_prj_conf("BOARD_ENABLE_DCDC", config[CONF_DCDC])
     else:
-        zephyr_add_overlay(
-            f"""
-                &reg1 {{
-                    regulator-initial-mode = <{"NRF5X_REG_MODE_DCDC" if config[CONF_DCDC] else "NRF5X_REG_MODE_LDO"}>;
-                }};
-            """
+        zephyr_overlay().node("reg1").add_property(
+            "regulator-initial-mode",
+            f"<{'NRF5X_REG_MODE_DCDC' if config[CONF_DCDC] else 'NRF5X_REG_MODE_LDO'}>",
         )
 
     if reg0_config := config.get(CONF_REG0):
@@ -476,13 +473,7 @@ async def to_code(config: ConfigType) -> None:
     if framework_ver < cv.Version(2, 9, 2):
         zephyr_add_prj_conf("NFCT_PINS_AS_GPIOS", True)
     else:
-        zephyr_add_overlay(
-            f"""
-                &reg1 {{
-                    regulator-initial-mode = <{"NRF5X_REG_MODE_DCDC" if config[CONF_DCDC] else "NRF5X_REG_MODE_LDO"}>;
-                }};
-            """
-        )
+        zephyr_overlay().node("uicr").add_property("nfct-pins-as-gpios")
 
 
 @coroutine_with_priority(CoroPriority.DIAGNOSTICS)

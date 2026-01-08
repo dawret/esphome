@@ -19,11 +19,7 @@ from esphome.components.esp32 import (
 from esphome.components.esp32.gpio_esp32_c5 import esp32_c5_validate_lp_i2c
 from esphome.components.esp32.gpio_esp32_c6 import esp32_c6_validate_lp_i2c
 from esphome.components.esp32.gpio_esp32_p4 import esp32_p4_validate_lp_i2c
-from esphome.components.zephyr import (
-    zephyr_add_overlay,
-    zephyr_add_prj_conf,
-    zephyr_data,
-)
+from esphome.components.zephyr import zephyr_add_prj_conf, zephyr_data, zephyr_overlay
 from esphome.components.zephyr.const import KEY_BOARD
 from esphome.config_helpers import filter_source_files_from_platform
 import esphome.config_validation as cv
@@ -185,24 +181,27 @@ async def to_code(config):
         i2c = "i2c0"
         if zephyr_data()[KEY_BOARD] in ["xiao_ble"]:
             i2c = "i2c1"
-        zephyr_add_overlay(
+        pinctrl = zephyr_overlay().node("pinctrl")
+        pinctrl.add_entry(
+            f"{i2c}_default",
             f"""
-                &pinctrl {{
-                    {i2c}_default: {i2c}_default {{
-                        group1 {{
-                            psels = <NRF_PSEL(TWIM_SDA, {config[CONF_SDA] // 32}, {config[CONF_SDA] % 32})>,
-                                <NRF_PSEL(TWIM_SCL, {config[CONF_SCL] // 32}, {config[CONF_SCL] % 32})>;
-                        }};
-                    }};
-                    {i2c}_sleep: {i2c}_sleep {{
-                        group1 {{
-                            psels = <NRF_PSEL(TWIM_SDA, {config[CONF_SDA] // 32}, {config[CONF_SDA] % 32})>,
-                                <NRF_PSEL(TWIM_SCL, {config[CONF_SCL] // 32}, {config[CONF_SCL] % 32})>;
-                            low-power-enable;
-                        }};
-                    }};
+                group1 {{
+                    psels = <NRF_PSEL(TWIM_SDA, {config[CONF_SDA] // 32}, {config[CONF_SDA] % 32})>,
+                        <NRF_PSEL(TWIM_SCL, {config[CONF_SCL] // 32}, {config[CONF_SCL] % 32})>;
                 }};
-            """
+            """,
+            label=f"{i2c}_default",
+        )
+        pinctrl.add_entry(
+            f"{i2c}_sleep",
+            f"""
+                group1 {{
+                    psels = <NRF_PSEL(TWIM_SDA, {config[CONF_SDA] // 32}, {config[CONF_SDA] % 32})>,
+                        <NRF_PSEL(TWIM_SCL, {config[CONF_SCL] // 32}, {config[CONF_SCL] % 32})>;
+                    low-power-enable;
+                }};
+            """,
+            label=f"{i2c}_sleep",
         )
         var = cg.new_Pvariable(
             config[CONF_ID], MockObj(f"DEVICE_DT_GET(DT_NODELABEL({i2c}))")
