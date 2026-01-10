@@ -229,10 +229,10 @@ def copy_files():
         + "\n"
     )
 
-    write_file_if_changed(CORE.relative_build_path("app/prj.conf"), prj_conf)
+    write_file_if_changed(CORE.relative_build_path("zephyr/prj.conf"), prj_conf)
 
     write_file_if_changed(
-        CORE.relative_build_path("app/app.overlay"),
+        CORE.relative_build_path("zephyr/app.overlay"),
         zephyr_data()[KEY_OVERLAY],
     )
 
@@ -249,4 +249,6 @@ def copy_files():
 
     pm_static = "\n".join(str(item) for item in zephyr_data()[KEY_PM_STATIC])
     if pm_static:
-        write_file_if_changed(CORE.relative_build_path("app/pm_static.yml"), pm_static)
+        write_file_if_changed(
+            CORE.relative_build_path("zephyr/pm_static.yml"), pm_static
+        )
