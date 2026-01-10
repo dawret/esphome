@@ -314,7 +314,8 @@ def _parse_board_config(config: ConfigType) -> ConfigType:
     if CONF_BOARD_FULL not in config:
         # Store the full board name (use BOARDS_ZEPHYR if available as reference)
         config[CONF_BOARD_FULL] = config[CONF_BOARD]
-        config[CONF_BOARD] = config[CONF_BOARD].split("/")[0]
+        if "/" in config[CONF_BOARD]:
+            config[CONF_BOARD] = config[CONF_BOARD].split("/")[0]
     return config
 
 
