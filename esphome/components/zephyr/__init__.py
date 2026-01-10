@@ -6,8 +6,7 @@ from typing import TypedDict
 import yaml
 
 import esphome.codegen as cg
-import esphome.config_validation as cv
-from esphome.const import CONF_BOARD, KEY_CORE, KEY_FRAMEWORK_VERSION
+from esphome.const import CONF_BOARD
 from esphome.core import CORE
 from esphome.helpers import copy_file_if_changed, write_file_if_changed
 
@@ -79,7 +78,7 @@ class ZephyrOverlayNode:
         if val:
             self.properties[name].update([val.strip()])
 
-    def add_entry(self, name: str, val: str, label: str|None = None) -> None:
+    def add_entry(self, name: str, val: str, label: str | None = None) -> None:
         """
         Add an entry to a dt node in the following format:
         label: name { val };
@@ -268,23 +267,6 @@ def _format_prj_conf_val(value: PrjConfValueType) -> str:
     if isinstance(value, str):
         return f'"{value}"'
     raise ValueError
-
-
-def zephyr_add_cdc_acm(config, id):
-    framework_ver: cv.Version = CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION]
-    if framework_ver >= cv.Version(3, 2, 0):
-        zephyr_add_prj_conf("CONFIG_USB_DEVICE_STACK_NEXT", False)
-    zephyr_add_prj_conf("USB_DEVICE_STACK", True)
-    zephyr_add_prj_conf("USB_CDC_ACM", True)
-    # prevent device to go to susspend, without this communication stop working in python
-    # there should be a way to solve it
-    zephyr_add_prj_conf("USB_DEVICE_REMOTE_WAKEUP", False)
-    # prevent logging when buffer is full
-    zephyr_add_prj_conf("USB_CDC_ACM_LOG_LEVEL_WRN", True)
-    zephyr_overlay().node("zephyr_udc0").add_entry(
-        f"cdc_acm_uart{id}",
-        'compatible = "zephyr,cdc-acm-uart";',
-    )
 
 
 def zephyr_add_pm_static(section: list[Section]):

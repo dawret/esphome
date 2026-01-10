@@ -23,11 +23,8 @@ from esphome.components.libretiny.const import (
     COMPONENT_LN882X,
     COMPONENT_RTL87XX,
 )
-from esphome.components.zephyr import (
-    zephyr_add_cdc_acm,
-    zephyr_add_prj_conf,
-    zephyr_overlay,
-)
+from esphome.components.zephyr import zephyr_add_prj_conf, zephyr_overlay
+from esphome.components.zephyr_usb import zephyr_usb_add_cdc_acm
 from esphome.config_helpers import filter_source_files_from_platform
 import esphome.config_validation as cv
 from esphome.const import (
@@ -99,6 +96,15 @@ CONF_INITIAL_LEVEL = "initial_level"
 CONF_LOGGER_ID = "logger_id"
 CONF_RUNTIME_TAG_LEVELS = "runtime_tag_levels"
 CONF_TASK_LOG_BUFFER_SIZE = "task_log_buffer_size"
+
+
+def _auto_load(config):
+    if CORE.is_nrf52 and config.get(CONF_HARDWARE_UART) == USB_CDC:
+        return ["zephyr_usb"]
+    return []
+
+
+AUTO_LOAD = _auto_load
 
 UART_SELECTION_ESP32 = {
     VARIANT_ESP32: [UART0, UART1, UART2],
@@ -403,13 +409,20 @@ async def to_code(config):
         pass
 
     if CORE.is_nrf52:
+        zephyr_add_prj_conf("LOG", True)
+        zephyr_add_prj_conf("LOG_PRINTK", True)
+        zephyr_add_prj_conf("UART_CONSOLE", True)
+        zephyr_add_prj_conf("STDOUT_CONSOLE", True)
+        zephyr_add_prj_conf("LOG_BACKEND_UART", True)
+        zephyr_add_prj_conf("UART_INTERRUPT_DRIVEN", True)
         if config[CONF_HARDWARE_UART] == UART0:
             zephyr_overlay().node("uart0").add_property("status", '"okay"')
         if config[CONF_HARDWARE_UART] == UART1:
             zephyr_overlay().node("uart1").add_property("status", '"okay"')
         if config[CONF_HARDWARE_UART] == USB_CDC:
-            zephyr_add_prj_conf("UART_LINE_CTRL", True)
-            zephyr_add_cdc_acm(config, 0)
+            dev = zephyr_usb_add_cdc_acm(config)
+            cg.add_define("LOGGER_CDC_ACM_DEVICE", str(dev))
+            zephyr_overlay().add_chosen("zephyr,console", f"&{dev}")
 
     # Register at end for safe mode
     await cg.register_component(log, config)

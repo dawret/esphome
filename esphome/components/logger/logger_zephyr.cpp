@@ -7,7 +7,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/sys/printk.h>
-#include <zephyr/usb/usb_device.h>
+#include <zephyr/logging/log.h>
 
 namespace esphome::logger {
 
@@ -47,9 +47,6 @@ void Logger::pre_setup() {
 #ifdef USE_LOGGER_USB_CDC
       case UART_SELECTION_USB_CDC:
         uart_dev = DEVICE_DT_GET_OR_NULL(DT_NODELABEL(cdc_acm_uart0));
-        if (device_is_ready(uart_dev)) {
-          usb_enable(nullptr);
-        }
         break;
 #endif
     }
@@ -63,20 +60,7 @@ void Logger::pre_setup() {
   ESP_LOGI(TAG, "Log initialized");
 }
 
-void HOT Logger::write_msg_(const char *msg, size_t len) {
-  // Single write with newline already in buffer (added by caller)
-#ifdef CONFIG_PRINTK
-  // Requires the debug component and an active SWD connection.
-  // It is used for pyocd rtt -t nrf52840
-  k_str_out(const_cast<char *>(msg), len);
-#endif
-  if (this->uart_dev_ == nullptr) {
-    return;
-  }
-  for (size_t i = 0; i < len; ++i) {
-    uart_poll_out(this->uart_dev_, msg[i]);
-  }
-}
+void HOT Logger::write_msg_(const char *msg, size_t len) { LOG_RAW("%.*s", static_cast<int>(len), msg); }
 
 const LogString *Logger::get_uart_selection_() {
   switch (this->uart_) {

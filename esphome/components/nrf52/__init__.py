@@ -7,6 +7,7 @@ import textwrap
 
 from esphome import pins
 import esphome.codegen as cg
+from esphome.components import zephyr_usb
 from esphome.components.zephyr import (
     Section,
     copy_files as zephyr_copy_files,
@@ -24,12 +25,14 @@ from esphome.components.zephyr.const import (
     KEY_BOOTLOADERS,
     KEY_ZEPHYR,
 )
+from esphome.components.zephyr_usb import CONF_ZEPHYR_USB_ID
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_BOARD,
     CONF_COMPONENTS,
     CONF_FRAMEWORK,
     CONF_ID,
+    CONF_METHOD,
     CONF_NAME,
     CONF_RESET_PIN,
     CONF_SOURCE,
@@ -61,7 +64,16 @@ from .const import (
 from .gpio import nrf52_pin_to_code  # noqa
 
 CODEOWNERS = ["@tomaszduda23"]
-AUTO_LOAD = ["zephyr", "preferences"]
+
+
+def _auto_load(config):
+    autoload = ["zephyr", "preferences"]
+    if CONF_DFU_TRIGGER in config:
+        autoload.append("zephyr_usb")
+    return autoload
+
+
+AUTO_LOAD = _auto_load
 IS_TARGET_PLATFORM = True
 _LOGGER = logging.getLogger(__name__)
 
@@ -93,9 +105,8 @@ BOOTLOADERS = [
 
 
 nrf52_ns = cg.esphome_ns.namespace("nrf52")
-DeviceFirmwareUpdate = nrf52_ns.class_("DeviceFirmwareUpdate", cg.Component)
+DFUTrigger = nrf52_ns.class_("DFUTrigger", cg.Component)
 
-CONF_DFU = "dfu"
 CONF_DCDC = "dcdc"
 CONF_REG0 = "reg0"
 CONF_UICR_ERASE = "uicr_erase"
@@ -105,6 +116,14 @@ CONF_FLASH_START_SIZE = "flash_start_size"
 CONF_FLASH_END_SIZE = "flash_end_size"
 CONF_BOOTLOADERS = "bootloaders"
 CONF_BOOTLOADER = "bootloader"
+
+CONF_DFU_TRIGGER = "dfu_trigger"
+CONF_DFU_TRIGGER_METHOD_GPIO = "gpio"
+CONF_DFU_TRIGGER_METHOD_GPREGRET = "gpregret"
+CONF_DFU_TRIGGER_RESET_MAGIC = "reset_magic"
+CONF_DFU_TRIGGER_RESET_MAGIC_UF2 = 0x57
+CONF_DFU_TRIGGER_RESET_MAGIC_NORDIC = 0xB1
+CONF_DFU_TRIGGER_BAUDRATE = "baudrate"
 
 VOLTAGE_LEVELS = [1.8, 2.1, 2.4, 2.7, 3.0, 3.3]
 
@@ -319,6 +338,39 @@ def _parse_board_config(config: ConfigType) -> ConfigType:
     return config
 
 
+def _validate_dfu_trigger_reset(config: ConfigType) -> ConfigType:
+    if CONF_METHOD in config:
+        if (
+            config[CONF_METHOD] == CONF_DFU_TRIGGER_METHOD_GPIO
+            and CONF_RESET_PIN not in config
+        ):
+            raise cv.Invalid("Reset method 'gpio' requires 'reset_pin' to be set.")
+        if (
+            config[CONF_METHOD] == CONF_DFU_TRIGGER_METHOD_GPREGRET
+            and CONF_RESET_PIN in config
+        ):
+            raise cv.Invalid(
+                "Reset method 'gpregret' does not support 'reset_pin' option."
+            )
+    return config
+
+
+DFU_TRIGGER_RESET_SCHEMA = cv.All(
+    cv.Schema(
+        {
+            cv.GenerateID(): cv.declare_id(DFUTrigger),
+            cv.GenerateID(CONF_ZEPHYR_USB_ID): cv.use_id(zephyr_usb.USB),
+            cv.Optional(CONF_METHOD): cv.one_of(
+                CONF_DFU_TRIGGER_METHOD_GPIO, CONF_DFU_TRIGGER_METHOD_GPREGRET
+            ),
+            cv.Optional(CONF_RESET_PIN): pins.gpio_input_pin_schema,
+            cv.Optional(CONF_DFU_TRIGGER_RESET_MAGIC): cv.hex_uint8_t,
+            cv.Optional(CONF_DFU_TRIGGER_BAUDRATE, default=1200): cv.positive_int,
+        }
+    ),
+    _validate_dfu_trigger_reset,
+)
+
 CONFIG_SCHEMA = cv.All(
     set_platform,
     _parse_board_config,
@@ -328,12 +380,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_BOARD_FULL): cv.string_strict,
             cv.Optional(CONF_BOOTLOADER): BOOTLOADER_SCHEMA,
             cv.Optional(CONF_BOOTLOADERS): cv.ensure_list(BOOTLOADER_SCHEMA),
-            cv.Optional(CONF_DFU): cv.Schema(
-                {
-                    cv.GenerateID(): cv.declare_id(DeviceFirmwareUpdate),
-                    cv.Required(CONF_RESET_PIN): pins.gpio_output_pin_schema,
-                }
-            ),
+            cv.Optional(CONF_DFU_TRIGGER): DFU_TRIGGER_RESET_SCHEMA,
             cv.Optional(CONF_DCDC, default=True): cv.boolean,
             cv.Optional(CONF_REG0): cv.Schema(
                 {
@@ -352,15 +399,26 @@ CONFIG_SCHEMA = cv.All(
 )
 
 
-def _validate_mcumgr(config):
-    bootloader = zephyr_data()[KEY_BOOTLOADERS][0]
-    if bootloader[CONF_TYPE] not in (BOOTLOADER_ADAFRUIT, BOOTLOADER_NORDIC):
-        raise cv.Invalid(f"'{bootloader}' bootloader does not support DFU")
+def _final_validate_dfu_trigger(config):
+    reset_config = config[CONF_DFU_TRIGGER]
+    if CONF_METHOD not in reset_config:
+        reset_config[CONF_METHOD] = CONF_DFU_TRIGGER_METHOD_GPIO
+    if reset_config[CONF_METHOD] == CONF_DFU_TRIGGER_METHOD_GPREGRET:
+        bootloader = zephyr_data()[KEY_BOOTLOADERS][0]
+        if CONF_DFU_TRIGGER_RESET_MAGIC not in reset_config:
+            if bootloader[CONF_TYPE] == BOOTLOADER_ADAFRUIT:
+                reset_config[CONF_DFU_TRIGGER_RESET_MAGIC] = (
+                    CONF_DFU_TRIGGER_RESET_MAGIC_UF2
+                )
+            elif bootloader[CONF_TYPE] == BOOTLOADER_NORDIC:
+                reset_config[CONF_DFU_TRIGGER_RESET_MAGIC] = (
+                    CONF_DFU_TRIGGER_RESET_MAGIC_NORDIC
+                )
 
 
 def _final_validate(config):
-    if CONF_DFU in config:
-        _validate_mcumgr(config)
+    if CONF_DFU_TRIGGER in config:
+        _final_validate_dfu_trigger(config)
 
 
 FINAL_VALIDATE_SCHEMA = _final_validate
@@ -399,8 +457,8 @@ async def to_code(config: ConfigType) -> None:
     zephyr_setup_preferences()
     zephyr_to_code(config)
 
-    if dfu_config := config.get(CONF_DFU):
-        CORE.add_job(_dfu_to_code, dfu_config)
+    if CONF_DFU_TRIGGER in config:
+        CORE.add_job(_dfu_trigger_to_code, config)
     framework_ver: cv.Version = CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION]
     if framework_ver < cv.Version(2, 9, 2):
         zephyr_add_prj_conf("BOARD_ENABLE_DCDC", config[CONF_DCDC])
@@ -427,9 +485,6 @@ async def to_code(config: ConfigType) -> None:
     # watchdog
     zephyr_add_prj_conf("WATCHDOG", True)
     zephyr_add_prj_conf("WDT_DISABLE_AT_BOOT", False)
-    # disable console
-    zephyr_add_prj_conf("UART_CONSOLE", False)
-    zephyr_add_prj_conf("CONSOLE", False)
     # use NFC pins as GPIO
     if framework_ver < cv.Version(2, 9, 2):
         zephyr_add_prj_conf("NFCT_PINS_AS_GPIOS", True)
@@ -438,12 +493,27 @@ async def to_code(config: ConfigType) -> None:
 
 
 @coroutine_with_priority(CoroPriority.DIAGNOSTICS)
-async def _dfu_to_code(dfu_config):
-    cg.add_define("USE_NRF52_DFU")
+async def _dfu_trigger_to_code(config):
+    dfu_config = config[CONF_DFU_TRIGGER]
+    cg.add_define("USE_NRF52_DFU_TRIGGER")
     var = cg.new_Pvariable(dfu_config[CONF_ID])
-    pin = await cg.gpio_pin_expression(dfu_config[CONF_RESET_PIN])
-    cg.add(var.set_reset_pin(pin))
-    zephyr_add_prj_conf("CDC_ACM_DTE_RATE_CALLBACK_SUPPORT", True)
+    zephyr_usb_var = await cg.get_variable(dfu_config[CONF_ZEPHYR_USB_ID])
+    cg.add_define("DFU_TRIGGER_BAUDRATE", dfu_config[CONF_DFU_TRIGGER_BAUDRATE])
+    cg.add(var.set_zephyr_usb(zephyr_usb_var))
+    if dfu_config[CONF_METHOD] == CONF_DFU_TRIGGER_METHOD_GPIO:
+        pin = await cg.gpio_pin_expression(dfu_config[CONF_RESET_PIN])
+        cg.add(var.set_reset_pin(pin))
+        cg.add_define("DFU_TRIGGER_METHOD_GPIO")
+        bootloader = zephyr_data()[KEY_BOOTLOADERS][0]
+        if bootloader["type"] == BOOTLOADER_ADAFRUIT:
+            cg.add_define("DFU_TRIGGER_GPIO_RESET_MAGIC", 0x5A1AD5)
+            cg.add_define("DFU_TRIGGER_GPIO_RESET_MAGIC_ADDRESS", 0x20007F7C)
+    else:
+        zephyr_add_prj_conf("REBOOT", True)
+        cg.add_define("DFU_TRIGGER_METHOD_GPREGRET")
+        cg.add_define(
+            "DFU_TRIGGER_GPREGRET_RESET_MAGIC", dfu_config[CONF_DFU_TRIGGER_RESET_MAGIC]
+        )
     await cg.register_component(var, dfu_config)
 
 
