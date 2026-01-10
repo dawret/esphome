@@ -311,9 +311,10 @@ BOOTLOADER_SCHEMA = cv.All(
 def _parse_board_config(config: ConfigType) -> ConfigType:
     """Add full board name to config based on CONF_BOARD."""
 
-    # Store the full board name (use BOARDS_ZEPHYR if available as reference)
-    config[CONF_BOARD_FULL] = config[CONF_BOARD]
-    config[CONF_BOARD] = config[CONF_BOARD].split("/")[0]
+    if CONF_BOARD_FULL not in config:
+        # Store the full board name (use BOARDS_ZEPHYR if available as reference)
+        config[CONF_BOARD_FULL] = config[CONF_BOARD]
+        config[CONF_BOARD] = config[CONF_BOARD].split("/")[0]
     return config
 
 
