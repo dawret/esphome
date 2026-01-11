@@ -15,10 +15,12 @@ from .const import (
     CONF_BOARD_FULL,
     KEY_BOARD,
     KEY_BOOTLOADERS,
+    KEY_CONF_FILES,
     KEY_EXTRA_BUILD_FILES,
     KEY_OVERLAY,
     KEY_PM_STATIC,
     KEY_PRJ_CONF,
+    KEY_SYSBUILD_CONF,
     KEY_USER,
     KEY_ZEPHYR,
     zephyr_ns,
@@ -53,7 +55,7 @@ class ZephyrData(TypedDict):
     board: str
     board_config: dict
     bootloaders: list
-    prj_conf: dict[str, tuple[PrjConfValueType, bool]]
+    conf_files: dict[Path, dict[str, tuple[PrjConfValueType, bool]]]
     overlay: str
     extra_build_files: dict[str, Path]
     pm_static: list[Section]
@@ -81,7 +83,7 @@ def zephyr_set_core_data(config):
         board=config[CONF_BOARD],
         board_config=_zephyr_set_board_config(config),
         bootloaders=config[KEY_BOOTLOADERS],
-        prj_conf={},
+        conf_files={},
         overlay="",
         extra_build_files={},
         pm_static=[],
@@ -94,23 +96,43 @@ def zephyr_data() -> ZephyrData:
     return CORE.data[KEY_ZEPHYR]
 
 
-def zephyr_add_prj_conf(
-    name: str, value: PrjConfValueType, required: bool = True
+def zephyr_conf_file(key: Path) -> dict[str, tuple[PrjConfValueType, bool]]:
+    conf_files = zephyr_data()[KEY_CONF_FILES]
+    if key not in conf_files:
+        conf_files[key] = {}
+    return conf_files[key]
+
+
+def zephyr_add_conf(
+    key: Path, name: str, value: PrjConfValueType, required: bool = True
 ) -> None:
-    """Set an zephyr prj conf value."""
-    if not name.startswith("CONFIG_"):
+    """Set an zephyr conf value."""
+    conf = zephyr_conf_file(key)
+    if not name.startswith("CONFIG_") and not name.startswith("SB_CONFIG_"):
         name = "CONFIG_" + name
-    prj_conf = zephyr_data()[KEY_PRJ_CONF]
-    if name not in prj_conf:
-        prj_conf[name] = (value, required)
+    if name not in conf:
+        conf[name] = (value, required)
         return
-    old_value, old_required = prj_conf[name]
+    old_value, old_required = conf[name]
     if old_value != value and old_required:
         raise ValueError(
             f"{name} already set with value '{old_value}', cannot set again to '{value}'"
         )
     if required:
-        prj_conf[name] = (value, required)
+        conf[name] = (value, required)
+
+
+def zephyr_add_sysbuild_conf(
+    name: str, value: PrjConfValueType, required: bool = True
+) -> None:
+    zephyr_add_conf(Path(KEY_SYSBUILD_CONF), name, value, required)
+
+
+def zephyr_add_prj_conf(
+    name: str, value: PrjConfValueType, required: bool = True
+) -> None:
+    """Set a zephyr prj conf value."""
+    zephyr_add_conf(Path(KEY_PRJ_CONF), name, value, required)
 
 
 def zephyr_add_overlay(content):
@@ -164,7 +186,7 @@ def zephyr_setup_preferences():
     zephyr_add_prj_conf("FLASH", True)
 
 
-def _format_prj_conf_val(value: PrjConfValueType) -> str:
+def _format_conf_val(value: PrjConfValueType) -> str:
     if isinstance(value, bool):
         return "y" if value else "n"
     if isinstance(value, int):
@@ -207,6 +229,23 @@ def zephyr_add_user(key, value):
     user[key] += [value]
 
 
+def _write_conf_file(path: Path, entries) -> None:
+    content = (
+        "\n".join(
+            f"{name}={_format_conf_val(value[0])}"
+            for name, value in sorted(entries.items())
+        )
+        + "\n"
+    )
+    write_file_if_changed(CORE.relative_build_path("zephyr" / path), content)
+
+
+def _write_conf_files() -> None:
+    conf_files = zephyr_data()[KEY_CONF_FILES]
+    for path, entries in conf_files.items():
+        _write_conf_file(path, entries)
+
+
 def copy_files():
     user = zephyr_data()[KEY_USER]
     if user:
@@ -219,17 +258,7 @@ def copy_files():
 }};"""
         )
 
-    want_opts = zephyr_data()[KEY_PRJ_CONF]
-
-    prj_conf = (
-        "\n".join(
-            f"{name}={_format_prj_conf_val(value[0])}"
-            for name, value in sorted(want_opts.items())
-        )
-        + "\n"
-    )
-
-    write_file_if_changed(CORE.relative_build_path("zephyr/prj.conf"), prj_conf)
+    _write_conf_files()
 
     write_file_if_changed(
         CORE.relative_build_path("zephyr/app.overlay"),
