@@ -125,7 +125,7 @@ MCUBOOT_FLASH_END_SIZE = 0x0
 PLATFORM_RECOMMENDED_SOURCE = (
     "https://github.com/dawret/platform-nordicnrf52/archive/refs/tags/v11.1.1.tar.gz"
 )
-PLATFORM_RECOMMENDED_SDK_VERSION = "3.2.0"
+PLATFORM_RECOMMENDED_SDK_VERSION = "2.9.2"
 
 
 def _validate_framework_config(config: ConfigType) -> ConfigType:
@@ -370,6 +370,9 @@ FINAL_VALIDATE_SCHEMA = _final_validate
 async def to_code(config: ConfigType) -> None:
     """Convert the configuration to code."""
     cg.add_platformio_option("board", zephyr_data()[KEY_BOARD])
+    cg.add_platformio_option(
+        KEY_FRAMEWORK_VERSION, CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION]
+    )
     cg.add_build_flag("-DUSE_NRF52")
     cg.add_define("ESPHOME_BOARD", zephyr_data()[KEY_BOARD])
     cg.add_define("ESPHOME_VARIANT", "NRF52")
@@ -399,7 +402,7 @@ async def to_code(config: ConfigType) -> None:
     if dfu_config := config.get(CONF_DFU):
         CORE.add_job(_dfu_to_code, dfu_config)
     framework_ver: cv.Version = CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION]
-    if framework_ver < cv.Version(3, 2, 0):
+    if framework_ver < cv.Version(2, 9, 2):
         zephyr_add_prj_conf("BOARD_ENABLE_DCDC", config[CONF_DCDC])
     else:
         zephyr_add_overlay(
@@ -418,7 +421,7 @@ async def to_code(config: ConfigType) -> None:
 
     framework_ver: cv.Version = CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION]
     # c++ support
-    if framework_ver < cv.Version(3, 2, 0):
+    if framework_ver < cv.Version(2, 9, 2):
         zephyr_add_prj_conf("CPLUSPLUS", True)
         zephyr_add_prj_conf("LIB_CPLUSPLUS", True)
     else:
@@ -431,7 +434,7 @@ async def to_code(config: ConfigType) -> None:
     zephyr_add_prj_conf("UART_CONSOLE", False)
     zephyr_add_prj_conf("CONSOLE", False)
     # use NFC pins as GPIO
-    if framework_ver < cv.Version(3, 2, 0):
+    if framework_ver < cv.Version(2, 9, 2):
         zephyr_add_prj_conf("NFCT_PINS_AS_GPIOS", True)
     else:
         zephyr_add_overlay(
