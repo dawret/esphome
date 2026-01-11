@@ -264,6 +264,10 @@ def copy_files():
         CORE.relative_build_path("zephyr/app.overlay"),
         zephyr_data()[KEY_OVERLAY],
     )
+    write_file_if_changed(
+        CORE.relative_build_path("zephyr/sysbuild/mcuboot.overlay"),
+        zephyr_data()[KEY_OVERLAY],
+    )
 
     write_file_if_changed(
         CORE.relative_build_path(f"boards/{zephyr_data()[KEY_BOARD]}.json"),
