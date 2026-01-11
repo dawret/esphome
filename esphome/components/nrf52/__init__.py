@@ -123,9 +123,9 @@ CONF_UICR_ERASE = "uicr_erase"
 VOLTAGE_LEVELS = [1.8, 2.1, 2.4, 2.7, 3.0, 3.3]
 
 PLATFORM_RECOMMENDED_SOURCE = (
-    "https://github.com/dawret/platform-nordicnrf52/archive/refs/tags/v11.0.0.tar.gz"
+    "https://github.com/dawret/platform-nordicnrf52/archive/refs/tags/v11.1.2.tar.gz"
 )
-PLATFORM_RECOMMENDED_SDK_VERSION = "3.2.0"
+PLATFORM_RECOMMENDED_SDK_VERSION = "2.9.2"
 
 
 def _validate_framework_config(config: ConfigType) -> ConfigType:
@@ -214,6 +214,9 @@ FINAL_VALIDATE_SCHEMA = _final_validate
 async def to_code(config: ConfigType) -> None:
     """Convert the configuration to code."""
     cg.add_platformio_option("board", zephyr_data()[KEY_BOARD])
+    cg.add_platformio_option(
+        KEY_FRAMEWORK_VERSION, CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION]
+    )
     cg.add_build_flag("-DUSE_NRF52")
     cg.add_define("ESPHOME_BOARD", zephyr_data()[KEY_BOARD])
     cg.add_define("ESPHOME_VARIANT", "NRF52")
@@ -400,7 +403,7 @@ def _find_uf2_partitions():
 def _get_upload_host(config: ConfigType, host: str) -> str | None:
     from esphome.__main__ import check_permissions, choose_prompt, get_port_type
 
-    if host == "swd":
+    if host in ("swd", "pyocd"):
         return host
     if host == "uf2":
         devices = _find_uf2_partitions()
@@ -433,6 +436,9 @@ def upload_program(config: ConfigType, args, host: str) -> bool:
     pio_host = _get_upload_host(config, host)
     if not pio_host:
         return False
+
+    if host == "pyocd":
+        result = _upload_using_platformio(config, host, ["-t", "flash_pyocd"])
 
     result = _upload_using_platformio(
         config,
