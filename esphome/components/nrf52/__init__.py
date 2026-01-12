@@ -395,8 +395,8 @@ async def to_code(config: ConfigType) -> None:
     bootloader = config[CONF_BOOTLOADERS][0]
     if bootloader[CONF_TYPE] == BOOTLOADER_MCUBOOT:
         zephyr_add_prj_conf("CONFIG_BOOTLOADER_MCUBOOT", True)
-    elif bootloader[CONF_TYPE] == BOOTLOADER_ADAFRUIT:
-        zephyr_add_prj_conf("CONFIG_BUILD_OUTPUT_UF2", True)
+    # elif bootloader[CONF_TYPE] == BOOTLOADER_ADAFRUIT:
+    #    zephyr_add_prj_conf("CONFIG_BUILD_OUTPUT_UF2", True)
 
     zephyr_add_sysbuild_conf("SB_CONFIG_BOOTLOADER_MCUBOOT", True)
     zephyr_add_sysbuild_conf("SB_CONFIG_BOOT_SIGNATURE_TYPE_NONE", True)
@@ -408,6 +408,14 @@ async def to_code(config: ConfigType) -> None:
     zephyr_add_conf(Path("sysbuild/mcuboot.conf"), "CONFIG_PM", True)
     zephyr_add_conf(Path("sysbuild/mcuboot.conf"), "BOOT_SERIAL_CDC_ACM", False)
     zephyr_add_conf(Path("sysbuild/mcuboot.conf"), "MCUBOOT_SERIAL", False)
+    zephyr_add_conf(Path("sysbuild/mcuboot.conf"), "USB_CDC_ACM", False)
+    zephyr_add_conf(Path("sysbuild/mcuboot.conf"), "CONSOLE", False)
+    zephyr_add_conf(Path("sysbuild/mcuboot.conf"), "SERIAL", False)
+    zephyr_add_conf(Path("sysbuild/mcuboot.conf"), "UART_CONSOLE", False)
+    zephyr_add_conf(Path("sysbuild/mcuboot.conf"), "LOG", False)
+    zephyr_add_conf(Path("sysbuild/mcuboot.conf"), "BUILD_OUTPUT_UF2", False)
+    zephyr_add_conf(Path("sysbuild/mcuboot.conf"), "USB_DEVICE_STACK", False)
+    # zephyr_add_conf(Path("sysbuild/mcuboot.conf"), "MCUBOOT_USB_SUPPORT", False)
 
     if config[CONF_BOARD] == "xiao_ble":
         zephyr_overlay().node("flash0").add_entry(
