@@ -17,7 +17,7 @@ from .const import (
     KEY_BOOTLOADERS,
     KEY_CONF_FILES,
     KEY_EXTRA_BUILD_FILES,
-    KEY_OVERLAY,
+    KEY_OVERLAYS,
     KEY_PM_STATIC,
     KEY_PRJ_CONF,
     KEY_SYSBUILD_CONF,
@@ -154,7 +154,7 @@ class ZephyrData(TypedDict):
     board_config: dict
     bootloaders: list
     conf_files: dict[Path, dict[str, tuple[PrjConfValueType, bool]]]
-    overlay: ZephyrOverlay
+    overlays: dict[str, ZephyrOverlay]
     extra_build_files: dict[str, Path]
     pm_static: list[Section]
 
@@ -181,7 +181,7 @@ def zephyr_set_core_data(config):
         board_config=_zephyr_set_board_config(config),
         bootloaders=config[KEY_BOOTLOADERS],
         conf_files={},
-        overlay=ZephyrOverlay(),
+        overlays={"app.overlay": ZephyrOverlay()},
         extra_build_files={},
         pm_static=[],
     )
@@ -192,8 +192,12 @@ def zephyr_data() -> ZephyrData:
     return CORE.data[KEY_ZEPHYR]
 
 
-def zephyr_overlay() -> ZephyrOverlay:
-    return zephyr_data()[KEY_OVERLAY]
+def zephyr_overlay(path: str | None = None) -> ZephyrOverlay:
+    if path is None:
+        path = "app.overlay"
+    if path not in zephyr_data()[KEY_OVERLAYS]:
+        zephyr_data()[KEY_OVERLAYS][path] = ZephyrOverlay()
+    return zephyr_data()[KEY_OVERLAYS][path]
 
 
 def zephyr_conf_file(key: Path) -> dict[str, tuple[PrjConfValueType, bool]]:
@@ -333,14 +337,11 @@ def _write_conf_files() -> None:
 def copy_files():
     _write_conf_files()
 
-    write_file_if_changed(
-        CORE.relative_build_path("zephyr/app.overlay"),
-        str(zephyr_data()[KEY_OVERLAY]),
-    )
-    write_file_if_changed(
-        CORE.relative_build_path("zephyr/sysbuild/mcuboot.overlay"),
-        str(zephyr_data()[KEY_OVERLAY]),
-    )
+    for filename, data in zephyr_data()[KEY_OVERLAYS].items():
+        write_file_if_changed(
+            CORE.relative_build_path(f"zephyr/{filename}"),
+            str(data),
+        )
 
     write_file_if_changed(
         CORE.relative_build_path(f"boards/{zephyr_data()[KEY_BOARD]}.json"),

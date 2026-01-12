@@ -414,22 +414,36 @@ async def to_code(config: ConfigType) -> None:
             "partitions",
             textwrap.dedent(
                 """
-                &flash0 {
+                compatible = "fixed-partitions";
+                #address-cells = <1>;
+                #size-cells = <1>;
 
-                    partitions {
-                        compatible = "fixed-partitions";
-                        #address-cells = <1>;
-                        #size-cells = <1>;
+                slot0_partition: partition@c000 {
+                    label = "image-0";
+                    reg = <0x0000C000 0x00077000>;
+                };
+                slot1_partition: partition@83000 {
+                    label = "image-1";
+                    reg = <0x00083000 0x00075000>;
+                };
+                """
+            ),
+        )
+        zephyr_overlay("sysbuild/mcuboot.overlay").node("flash0").add_entry(
+            "partitions",
+            textwrap.dedent(
+                """
+                compatible = "fixed-partitions";
+                #address-cells = <1>;
+                #size-cells = <1>;
 
-                        slot0_partition: partition@c000 {
-                            label = "image-0";
-                            reg = <0x0000C000 0x00077000>;
-                        };
-                        slot1_partition: partition@83000 {
-                            label = "image-1";
-                            reg = <0x00083000 0x00075000>;
-                        };
-                    };
+                slot0_partition: partition@c000 {
+                    label = "image-0";
+                    reg = <0x0000C000 0x00077000>;
+                };
+                slot1_partition: partition@83000 {
+                    label = "image-1";
+                    reg = <0x00083000 0x00075000>;
                 };
                 """
             ),

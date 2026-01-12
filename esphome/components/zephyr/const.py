@@ -4,7 +4,7 @@ import esphome.codegen as cg
 
 KEY_BOOTLOADERS: Final = "bootloaders"
 KEY_EXTRA_BUILD_FILES: Final = "extra_build_files"
-KEY_OVERLAY: Final = "overlay"
+KEY_OVERLAYS: Final = "overlays"
 KEY_PM_STATIC: Final = "pm_static"
 KEY_PRJ_CONF: Final = "prj.conf"
 KEY_SYSBUILD_CONF: Final = "sysbuild.conf"
