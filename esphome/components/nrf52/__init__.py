@@ -57,6 +57,7 @@ from .const import (
     CONF_MCU,
     CONF_PARTITIONS,
     MCU_FAMILY_NRF52,
+    MCU_FAMILY_NRF54,
 )
 
 # force import gpio to register pin schema
@@ -325,6 +326,9 @@ async def to_code(config: ConfigType) -> None:
                 zephyr_add_prj_conf("NFCT_PINS_AS_GPIOS", True)
             else:
                 zephyr_overlay().node("uicr").add_property("nfct-pins-as-gpios")
+
+    if board.mcu in MCU_FAMILY_NRF54:
+        zephyr_overlay().node("wdt31").add_property("status", '"okay"')
 
     # c++ support
     if framework_ver < cv.Version(2, 9, 2):
