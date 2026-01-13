@@ -1,5 +1,6 @@
 #ifdef USE_ZEPHYR
 #include "gpio.h"
+#include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
 #include "esphome/core/log.h"
 
@@ -43,6 +44,11 @@ ISRInternalGPIOPin ZephyrGPIOPin::to_isr() const {
   arg->pin = this->pin_;
   arg->inverted = this->inverted_;
   return ISRInternalGPIOPin((void *) arg);
+}
+ZephyrGPIOPin::ZephyrGPIOPin(const char *gpio_label, int gpio_size, const char *pin_name_prefix) {
+  this->gpio_ = device_get_binding(gpio_label);
+  this->gpio_size_ = gpio_size;
+  this->pin_name_prefix_ = pin_name_prefix;
 }
 
 void ZephyrGPIOPin::attach_interrupt(void (*func)(void *), void *arg, gpio::InterruptType type) const {
