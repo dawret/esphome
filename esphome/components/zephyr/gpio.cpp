@@ -1,5 +1,6 @@
 #ifdef USE_ZEPHYR
 #include "gpio.h"
+#include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
 #include "esphome/core/log.h"
 
@@ -7,6 +8,14 @@ namespace esphome {
 namespace zephyr {
 
 static const char *const TAG = "zephyr";
+
+// Number of nRF GPIO instances with status = "okay"
+enum { ZEPHYR_GPIO_PORT_COUNT = DT_NUM_INST_STATUS_OKAY(nordic_nrf_gpio) };
+
+// Emit a device pointer for each "okay" instance, with a comma for array init
+#define ZEPHYR_GPIO_ITEM(inst) [DT_PROP(inst, port)] = DEVICE_DT_GET(inst),
+
+static const struct device *const nrf_gpio_ports[] = {DT_FOREACH_STATUS_OKAY(nordic_nrf_gpio, ZEPHYR_GPIO_ITEM)};
 
 static gpio_flags_t flags_to_mode(gpio::Flags flags, bool inverted, bool value) {
   gpio_flags_t ret = 0;
@@ -43,6 +52,15 @@ ISRInternalGPIOPin ZephyrGPIOPin::to_isr() const {
   arg->pin = this->pin_;
   arg->inverted = this->inverted_;
   return ISRInternalGPIOPin((void *) arg);
+}
+ZephyrGPIOPin::ZephyrGPIOPin(int port, int gpio_size, const char *pin_name_prefix) {
+  if (port < ZEPHYR_GPIO_PORT_COUNT) {
+    this->gpio_ = nrf_gpio_ports[port];
+  } else {
+    ESP_LOGE(TAG, "Invalid GPIO port %d (max %d)", port, ZEPHYR_GPIO_PORT_COUNT - 1);
+  }
+  this->gpio_size_ = gpio_size;
+  this->pin_name_prefix_ = pin_name_prefix;
 }
 
 void ZephyrGPIOPin::attach_interrupt(void (*func)(void *), void *arg, gpio::InterruptType type) const {

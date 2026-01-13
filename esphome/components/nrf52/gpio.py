@@ -76,7 +76,7 @@ async def nrf52_pin_to_code(config):
     pin_name_prefix = f"P{port}."
     var = cg.new_Pvariable(
         config[CONF_ID],
-        cg.RawExpression(f"DEVICE_DT_GET_OR_NULL(DT_NODELABEL(gpio{port}))"),
+        port,
         32,
         pin_name_prefix,
     )
