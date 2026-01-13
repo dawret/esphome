@@ -18,6 +18,7 @@ from esphome.components.zephyr import (
 )
 from esphome.components.zephyr.const import (
     BOOTLOADER_MCUBOOT,
+    KEY_BOARD,
     KEY_BOOTLOADER,
     KEY_ZEPHYR,
 )
@@ -58,6 +59,11 @@ CODEOWNERS = ["@tomaszduda23"]
 AUTO_LOAD = ["zephyr", "preferences"]
 IS_TARGET_PLATFORM = True
 _LOGGER = logging.getLogger(__name__)
+
+
+def set_platform(config: ConfigType) -> ConfigType:
+    CORE.data[KEY_CORE][KEY_TARGET_PLATFORM] = PLATFORM_NRF52
+    return config
 
 
 def set_core_data(config: ConfigType) -> ConfigType:
@@ -161,6 +167,7 @@ FRAMEWORK_SCHEMA = cv.All(
 
 
 CONFIG_SCHEMA = cv.All(
+    set_platform,
     cv.Schema(
         {
             cv.Required(CONF_BOARD): cv.string_strict,
@@ -210,9 +217,9 @@ FINAL_VALIDATE_SCHEMA = _final_validate
 @coroutine_with_priority(CoroPriority.PLATFORM)
 async def to_code(config: ConfigType) -> None:
     """Convert the configuration to code."""
-    cg.add_platformio_option("board", config[CONF_BOARD])
+    cg.add_platformio_option("board", zephyr_data()[KEY_BOARD])
     cg.add_build_flag("-DUSE_NRF52")
-    cg.add_define("ESPHOME_BOARD", config[CONF_BOARD])
+    cg.add_define("ESPHOME_BOARD", zephyr_data()[KEY_BOARD])
     cg.add_define("ESPHOME_VARIANT", "NRF52")
     # nRF52 processors are single-core
     cg.add_define(ThreadModel.SINGLE)
@@ -244,6 +251,8 @@ async def to_code(config: ConfigType) -> None:
         cg.add_platformio_option("board_upload.use_1200bps_touch", "true")
         cg.add_platformio_option("board_upload.require_upload_port", "true")
         cg.add_platformio_option("board_upload.wait_for_upload_port", "true")
+
+    zephyr_add_prj_conf("CONFIG_BUILD_OUTPUT_UF2", True)
 
     zephyr_setup_preferences()
     zephyr_to_code(config)

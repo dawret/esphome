@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 import textwrap
 from typing import TypedDict
@@ -9,7 +10,6 @@ from esphome.core import CORE
 from esphome.helpers import copy_file_if_changed, write_file_if_changed
 
 from .const import (
-    BOOTLOADER_MCUBOOT,
     KEY_BOARD,
     KEY_BOOTLOADER,
     KEY_EXTRA_BUILD_FILES,
@@ -46,7 +46,7 @@ class Section:
 
 class ZephyrData(TypedDict):
     board: str
-    bootloader: str
+    board_config: dict
     prj_conf: dict[str, tuple[PrjConfValueType, bool]]
     overlay: str
     extra_build_files: dict[str, Path]
@@ -54,9 +54,25 @@ class ZephyrData(TypedDict):
     user: dict[str, list[str]]
 
 
+def _zephyr_set_board_config(config):
+    return {
+        "frameworks": ["zephyr"],
+        "board_name": config[CONF_BOARD],
+        "name": "esphome nrf52",
+        "upload": {
+            "maximum_ram_size": 248832,
+            "maximum_size": 815104,
+        },
+        "url": "https://esphome.io/",
+        "vendor": "esphome",
+        "build": {},
+    }
+
+
 def zephyr_set_core_data(config):
     CORE.data[KEY_ZEPHYR] = ZephyrData(
-        board=config[CONF_BOARD],
+        board=config[CONF_BOARD].split("/")[0],
+        board_config=_zephyr_set_board_config(config),
         bootloader=config[KEY_BOOTLOADER],
         prj_conf={},
         overlay="",
@@ -213,37 +229,10 @@ def copy_files():
         zephyr_data()[KEY_OVERLAY],
     )
 
-    if zephyr_data()[KEY_BOOTLOADER] == BOOTLOADER_MCUBOOT or zephyr_data()[
-        KEY_BOARD
-    ] in ["xiao_ble", "adafruit_itsybitsy"]:
-        fake_board_manifest = """
-{
-    "frameworks": [
-        "zephyr"
-    ],
-    "name": "esphome nrf52",
-    "upload": {
-        "maximum_ram_size": 248832,
-        "maximum_size": 815104,
-        "speed": 115200
-    },
-    "url": "https://esphome.io/",
-    "vendor": "esphome",
-    "build": {
-        "bsp": {
-            "name": "adafruit"
-        },
-        "softdevice": {
-            "sd_fwid": "0x00B6"
-        }
-    }
-}
-"""
-
-        write_file_if_changed(
-            CORE.relative_build_path(f"boards/{zephyr_data()[KEY_BOARD]}.json"),
-            fake_board_manifest,
-        )
+    write_file_if_changed(
+        CORE.relative_build_path(f"boards/{zephyr_data()[KEY_BOARD]}.json"),
+        json.dumps(zephyr_data()["board_config"]),
+    )
 
     for filename, path in zephyr_data()[KEY_EXTRA_BUILD_FILES].items():
         copy_file_if_changed(
