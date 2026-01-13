@@ -32,8 +32,8 @@ BOARDS_ZEPHYR = {
 # https://learn.adafruit.com/introducing-the-adafruit-nrf52840-feather?view=all#hathach-memory-map
 BOOTLOADER_CONFIG = {
     BOOTLOADER_MCUBOOT: [
-        Section("app", 0x0, 0xFE000, "flash_primary"),
-        Section("settings_storage", 0xFE000, 0x2000, "flash_primary"),
+        # Section("app", 0x0, 0xFE000, "flash_primary"),
+        # Section("settings_storage", 0xFE000, 0x2000, "flash_primary"),
     ],
     BOOTLOADER_ADAFRUIT_NRF52_SD132: [
         Section("empty_app_offset", 0x0, 0x26000, "flash_primary"),

@@ -125,7 +125,7 @@ def zephyr_to_code(config):
 
     # <err> os: ***** USAGE FAULT *****
     # <err> os:   Illegal load of EXC_RETURN into PC
-    zephyr_add_prj_conf("MAIN_STACK_SIZE", 4096)
+    zephyr_add_prj_conf("MAIN_STACK_SIZE", 16384)
 
     add_extra_script(
         "pre",
