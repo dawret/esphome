@@ -315,22 +315,48 @@ async def to_code(config: ConfigType) -> None:
     if dfu_config := config.get(CONF_DFU):
         CORE.add_job(_dfu_to_code, dfu_config)
     framework_ver: cv.Version = CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION]
-    if framework_ver < cv.Version(2, 9, 2):
-        zephyr_add_prj_conf("BOARD_ENABLE_DCDC", config[CONF_DCDC])
-    else:
+
+    if (
+        "nrf54l" not in config[CONF_BOARD].lower()
+        and "nrf5340" not in config[CONF_BOARD].lower()
+    ):
+        if framework_ver < cv.Version(2, 9, 2):
+            zephyr_add_prj_conf("BOARD_ENABLE_DCDC", config[CONF_DCDC])
+        else:
+            zephyr_add_overlay(
+                f"""
+                    &reg1 {{
+                        regulator-initial-mode = <{"NRF5X_REG_MODE_DCDC" if config[CONF_DCDC] else "NRF5X_REG_MODE_LDO"}>;
+                    }};
+                """
+            )
+
+            if framework_ver < cv.Version(2, 9, 2):
+                zephyr_add_prj_conf("NFCT_PINS_AS_GPIOS", True)
+            else:
+                zephyr_add_overlay(
+                    """
+                        &uicr {
+                            nfct-pins-as-gpios;
+                        };
+                    """
+                )
+
+        if reg0_config := config.get(CONF_REG0):
+            value = VOLTAGE_LEVELS.index(reg0_config[CONF_VOLTAGE])
+            cg.add_define("USE_NRF52_REG0_VOUT", value)
+            if reg0_config[CONF_UICR_ERASE]:
+                cg.add_define("USE_NRF52_UICR_ERASE")
+
+    if "nrf54l" in config[CONF_BOARD].lower():
+        cg.add_platformio_option("upload_flags", ["--device", "nRF54L15_M33"])
         zephyr_add_overlay(
-            f"""
-                &reg1 {{
-                    regulator-initial-mode = <{"NRF5X_REG_MODE_DCDC" if config[CONF_DCDC] else "NRF5X_REG_MODE_LDO"}>;
-                }};
+            """
+                &wdt31 {
+                    status = "okay";
+                };
             """
         )
-
-    if reg0_config := config.get(CONF_REG0):
-        value = VOLTAGE_LEVELS.index(reg0_config[CONF_VOLTAGE])
-        cg.add_define("USE_NRF52_REG0_VOUT", value)
-        if reg0_config[CONF_UICR_ERASE]:
-            cg.add_define("USE_NRF52_UICR_ERASE")
 
     # c++ support
     if framework_ver < cv.Version(2, 9, 2):
@@ -358,26 +384,19 @@ async def to_code(config: ConfigType) -> None:
     zephyr_add_prj_conf("LOG_MODE_DEFERRED", True)
     zephyr_add_prj_conf("LOG_BACKEND_UART", True)
     zephyr_add_prj_conf("UART_INTERRUPT_DRIVEN", True)
+    uart_dev = "uart0"
+    if "nrf54l" in config[CONF_BOARD].lower():
+        uart_dev = "uart20"
     zephyr_add_overlay(
-        """
-                / {
-                    chosen {
-                        zephyr,console = &uart0;
-                        zephyr,shell-uart = &uart0;
-                    };
-                };
+        f"""
+                / {{
+                    chosen {{
+                        zephyr,console = &{uart_dev};
+                        zephyr,shell-uart = &{uart_dev};
+                    }};
+                }};
             """
     )
-    if framework_ver < cv.Version(2, 9, 2):
-        zephyr_add_prj_conf("NFCT_PINS_AS_GPIOS", True)
-    else:
-        zephyr_add_overlay(
-            """
-                &uicr {
-                    nfct-pins-as-gpios;
-                };
-            """
-        )
 
 
 @coroutine_with_priority(CoroPriority.DIAGNOSTICS)
