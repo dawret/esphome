@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
+import textwrap
 
 from esphome import pins
 import esphome.codegen as cg
@@ -322,51 +323,115 @@ def copy_files() -> None:
 def get_download_types(storage_json: StorageJSON) -> list[dict[str, str]]:
     """Get the download types for the firmware."""
     types = []
-    UF2_PATH = "zephyr/zephyr.uf2"
-    DFU_PATH = "firmware.zip"
-    HEX_PATH = "zephyr/zephyr.hex"
-    HEX_MERGED_PATH = "zephyr/merged.hex"
+    UF2_PATH = "merged.uf2"
+    DFU_PATH = "merged.zip"
+    HEX_PATH = "merged.hex"
     APP_IMAGE_PATH = "zephyr/app_update.bin"
     build_dir = Path(storage_json.firmware_bin_path).parent
     if (build_dir / UF2_PATH).is_file():
         types = [
             {
                 "title": "UF2 package (recommended)",
-                "description": "For flashing via Adafruit nRF52 Bootloader as a flash drive.",
+                "description": textwrap.dedent(
+                    """\
+                    For flashing via Adafruit nRF52 Bootloader as a flash drive.
+
+                    To flash, either copy the UF2 file to the mounted drive,
+                    or run esphome upload --host [uf2|<drive_path>] <config.yaml>.
+                    When using --host uf2, the drive will be auto-detected.
+                """
+                ),
                 "file": UF2_PATH,
                 "download": f"{storage_json.name}.uf2",
-            },
+            }
+        ]
+    if (build_dir / DFU_PATH).is_file():
+        types += [
             {
                 "title": "DFU package",
-                "description": "For flashing via adafruit-nrfutil using USB CDC.",
+                "description": textwrap.dedent(
+                    """\
+                    For flashing via adafruit-nrfutil or nordic-nrfutil using USB CDC.
+
+                    To flash, run esphome upload <config.yaml> or esphome upload --host <serial_port> <config.yaml>.
+                """
+                ),
                 "file": DFU_PATH,
                 "download": f"dfu-{storage_json.name}.zip",
             },
         ]
-    else:
-        types = [
+    if (build_dir / HEX_PATH).is_file():
+        types += [
             {
                 "title": "HEX package",
-                "description": "For flashing via pyocd using SWD.",
-                "file": (
-                    HEX_MERGED_PATH
-                    if (build_dir / HEX_MERGED_PATH).is_file()
-                    else HEX_PATH
+                "description": textwrap.dedent(
+                    """\
+                    For flashing via pyocd using SWD.
+
+                    To flash, run esphome upload --host swd <config.yaml>.
+                """
                 ),
+                "file": (HEX_PATH),
                 "download": f"{storage_json.name}.hex",
             },
         ]
-        if (build_dir / APP_IMAGE_PATH).is_file():
-            types += [
-                {
-                    "title": "App update package",
-                    "description": "For flashing via mcumgr-web using BLE or smpclient using USB CDC.",
-                    "file": APP_IMAGE_PATH,
-                    "download": f"app-{storage_json.name}.img",
-                },
-            ]
+    if (build_dir / APP_IMAGE_PATH).is_file():
+        types += [
+            {
+                "title": "App update package",
+                "description": "For flashing via mcumgr-web using BLE or smpclient using USB CDC.",
+                "file": APP_IMAGE_PATH,
+                "download": f"app-{storage_json.name}.img",
+            },
+        ]
 
     return types
+
+
+def _find_uf2_partitions():
+    import psutil
+
+    uf2_devices = {}
+    for partition in psutil.disk_partitions():
+        if "fstype" in partition and partition.fstype == "":
+            continue
+
+        mount_point = partition.mountpoint
+        device = partition.device
+
+        info_path = Path(mount_point) / "INFO_UF2.TXT"
+
+        try:
+            if info_path.is_file():
+                if device in uf2_devices:
+                    if len(uf2_devices[device]) > len(mount_point):
+                        uf2_devices[device] = mount_point
+                else:
+                    uf2_devices[device] = mount_point
+        except (OSError, PermissionError):
+            continue
+
+    return list(uf2_devices.values())
+
+
+def _get_upload_host(config: ConfigType, host: str) -> str | None:
+    from esphome.__main__ import check_permissions, choose_prompt, get_port_type
+
+    if host == "swd":
+        return host
+    if host == "uf2":
+        devices = _find_uf2_partitions()
+        if not devices:
+            return None
+        if len(devices) > 1:
+            host = choose_prompt([(d, d) for d in devices], purpose="upload")
+        else:
+            host = devices[0]
+        return host
+    if get_port_type(host) == "SERIAL":
+        check_permissions(host)
+        return host
+    return None
 
 
 def _upload_using_platformio(
@@ -380,26 +445,22 @@ def _upload_using_platformio(
 
 
 def upload_program(config: ConfigType, args, host: str) -> bool:
-    from esphome.__main__ import check_permissions, get_port_type
-
     print(f"Uploading to nrf52 via {host} ({args=})")
 
-    result = 0
-    handled = False
+    pio_host = _get_upload_host(config, host)
+    if not pio_host:
+        return False
 
-    if get_port_type(host) == "SERIAL":
-        check_permissions(host)
-        result = _upload_using_platformio(config, host, ["-t", "flash_dfu"])
-        handled = True
-
-    if host == "PYOCD":
-        result = _upload_using_platformio(config, host, ["-t", "flash_pyocd"])
-        handled = True
+    result = _upload_using_platformio(
+        config,
+        pio_host,
+        ["-t", "upload"],
+    )
 
     if result != 0:
         raise EsphomeError(f"Upload failed with result: {result}")
 
-    return handled
+    return True
 
 
 def show_logs(config: ConfigType, args, devices: list[str]) -> bool:
