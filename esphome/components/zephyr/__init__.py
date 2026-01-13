@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import json
 from pathlib import Path
 import textwrap
@@ -5,13 +6,12 @@ from typing import TypedDict
 
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.const import CONF_BOARD, KEY_CORE, KEY_FRAMEWORK_VERSION
+from esphome.const import KEY_CORE, KEY_FRAMEWORK_VERSION
 from esphome.core import CORE
 from esphome.helpers import copy_file_if_changed, write_file_if_changed
 
 from .const import (
     KEY_BOARD,
-    KEY_BOOTLOADER,
     KEY_CONF_FILES,
     KEY_EXTRA_BUILD_FILES,
     KEY_OVERLAYS,
@@ -151,33 +151,45 @@ class ZephyrOverlay:
         return out
 
 
+@dataclass
+class ZephyrBoard:
+    id: str
+    name: str
+    mcu: str
+    vendor: str
+    flash_size: int
+    ram_size: int
+    external_flash: dict | None
+    bootloader: dict | None
+
+    def to_platformio_board(self) -> dict:
+        return {
+            "frameworks": ["zephyr"],
+            "board_name": self.name,  # This is the name that's used in "west" commands
+            "name": self.id,
+            "mcu": self.mcu,
+            "upload": {
+                "maximum_size": self.flash_size,
+                "maximum_ram_size": self.ram_size,
+            },
+            "url": "https://esphome.io",
+            "vendor": self.vendor,
+            "build": {},
+            "bootloader": self.bootloader,
+        }
+
+
 class ZephyrData(TypedDict):
-    board: str
-    board_config: dict
-    bootloader: str
+    board: ZephyrBoard
     conf_files: dict[Path, dict[str, tuple[PrjConfValueType, bool]]]
     overlays: dict[str, ZephyrOverlay]
     extra_build_files: dict[str, Path]
     pm_static: list[Section]
 
 
-def _zephyr_set_board_config(config):
-    return {
-        "frameworks": ["zephyr"],
-        "board_name": config[CONF_BOARD],
-        "name": "esphome nrf52",
-        "upload": {"maximum_ram_size": 248832, "maximum_size": 815104, "speed": 115200},
-        "url": "https://esphome.io/",
-        "vendor": "esphome",
-        "build": {"bsp": {"name": "adafruit"}, "softdevice": {"sd_fwid": "0x00B6"}},
-    }
-
-
-def zephyr_set_core_data(config):
+def zephyr_set_core_data(config, board: ZephyrBoard):
     CORE.data[KEY_ZEPHYR] = ZephyrData(
-        board=config[CONF_BOARD].split("/")[0],
-        board_config=_zephyr_set_board_config(config),
-        bootloader=config[KEY_BOOTLOADER],
+        board=board,
         conf_files={},
         overlays={OVERLAY_FILE_APP: ZephyrOverlay()},
         extra_build_files={},
@@ -311,7 +323,7 @@ def zephyr_add_cdc_acm(config, id):
     )
 
 
-def zephyr_add_pm_static(section: Section):
+def zephyr_add_pm_static(section: list[Section]):
     CORE.data[KEY_ZEPHYR][KEY_PM_STATIC].extend(section)
 
 
@@ -354,8 +366,8 @@ def copy_files():
         )
 
     write_file_if_changed(
-        CORE.relative_build_path(f"boards/{zephyr_data()[KEY_BOARD]}.json"),
-        json.dumps(zephyr_data()["board_config"]),
+        CORE.relative_build_path(f"boards/{zephyr_data()[KEY_BOARD].id}.json"),
+        json.dumps(zephyr_data()[KEY_BOARD].to_platformio_board(), indent=4),
     )
 
     for filename, path in zephyr_data()[KEY_EXTRA_BUILD_FILES].items():
