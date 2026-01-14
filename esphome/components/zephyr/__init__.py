@@ -1,8 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from pathlib import Path
 import textwrap
 from typing import TypedDict
+
+import yaml
 
 import esphome.codegen as cg
 import esphome.config_validation as cv
@@ -13,9 +15,11 @@ from esphome.helpers import copy_file_if_changed, write_file_if_changed
 from .const import (
     KEY_BOARD,
     KEY_CONF_FILES,
+    KEY_EXTERNAL_FLASH,
     KEY_EXTRA_BUILD_FILES,
+    KEY_FLASH_PRIMARY,
     KEY_OVERLAYS,
-    KEY_PM_STATIC,
+    KEY_PARTITIONS,
     KEY_PRJ_CONF,
     KEY_SYSBUILD_CONF,
     KEY_ZEPHYR,
@@ -27,22 +31,127 @@ CODEOWNERS = ["@tomaszduda23"]
 PrjConfValueType = bool | str | int
 
 
+@dataclass
 class Section:
-    def __init__(self, name, address, size, region):
-        self.name = name
-        self.address = address
+    name: str
+    address: int
+    size: int
+    region: str
+    span: list[str] = field(default_factory=list)
+
+    @property
+    def end_address(self) -> int:
+        return self.address + self.size
+
+    def as_dict(self) -> dict:
+        ret = {
+            "address": self.address,
+            "size": self.size,
+            "region": self.region,
+        }
+        if self.span:
+            ret["span"] = self.span
+        return ret
+
+    def __str__(self) -> str:
+        return f"{self.name} (address=0x{self.address:X}, size=0x{self.size:X})"
+
+
+class PartitionLayout:
+    partitions: dict[str, Section]
+
+    def __init__(self, size: int, region=KEY_FLASH_PRIMARY, sector_size=0x1000):
+        self.partitions = {}
         self.size = size
         self.region = region
-        self.end_address = self.address + self.size
+        self.sector_size = sector_size
 
-    def __str__(self):
-        return (
-            f"{self.name}:\n"
-            f"  address: 0x{self.address:X}\n"
-            f"  end_address: 0x{self.end_address:X}\n"
-            f"  region: {self.region}\n"
-            f"  size: 0x{self.size:X}"
+    def get_top_level_partitions(self) -> list[Section]:
+        spans = set()
+        for p in self.partitions.values():
+            spans.update(p.span)
+        top_level = []
+        for n, p in self.partitions.items():
+            if n not in spans:
+                top_level.append(p)
+        return sorted(top_level, key=lambda p: p.address, reverse=False)
+
+    def _free(self) -> tuple[int, int]:
+        parts = self.get_top_level_partitions()
+        start = 0
+        end = self.size
+        if len(parts) == 0:
+            return start, end
+        for p in range(len(parts) - 1):
+            current = parts[p]
+            next = parts[p + 1]
+            if current.end_address < next.address:
+                start = current.end_address
+                end = next.address
+                break
+        if start == 0 and end == self.size:
+            raise cv.Invalid("No free space available in partition layout")
+        return start, end
+
+    def add(
+        self,
+        name: str,
+        address: int,
+        size: int,
+        span: list[str] = [],
+    ):
+        if name in self.partitions:
+            raise cv.Invalid(f"Partition '{name}' already exists in {self.region}")
+
+        self.partitions[name] = Section(
+            name=name,
+            address=address,
+            size=size,
+            span=span,
+            region=self.region,
         )
+        return self.partitions[name]
+
+    def add_start(
+        self,
+        name: str,
+        size: int,
+        span: list[str] = [],
+    ):
+        free = self._free()
+        return self.add(name, free[0], size, span)
+
+    def add_end(
+        self,
+        name: str,
+        size: int,
+        span: list[str] = [],
+    ):
+        free = self._free()
+        return self.add(name, free[1] - size, size, span)
+
+    @property
+    def available_space(self) -> int:
+        free = self._free()
+        return free[1] - free[0]
+
+    def validate(self) -> None:
+        gaps = 0
+        partitions = self.get_top_level_partitions()
+        for i in range(len(partitions) - 1):
+            current = partitions[i]
+            next_part = partitions[i + 1]
+            if current.end_address > next_part.address:
+                raise cv.Invalid(
+                    f"Partition '{current}' overlaps with partition '{next_part}'"
+                )
+            if current.end_address < next_part.address:
+                gaps += 1
+        if gaps > 1:
+            raise cv.Invalid("More than one gap detected in partition layout")
+
+    def to_dict(self):
+        return {k: v.as_dict() for k, v in self.partitions.items()}
 
 
 class ZephyrOverlayNode:
@@ -184,16 +293,25 @@ class ZephyrData(TypedDict):
     conf_files: dict[Path, dict[str, tuple[PrjConfValueType, bool]]]
     overlays: dict[str, ZephyrOverlay]
     extra_build_files: dict[str, Path]
-    pm_static: list[Section]
+    partitions: dict[str, PartitionLayout]
 
 
 def zephyr_set_core_data(config, board: ZephyrBoard):
+    partitions = {
+        KEY_FLASH_PRIMARY: PartitionLayout(
+            size=board.flash_size, region=KEY_FLASH_PRIMARY
+        )
+    }
+    if board.external_flash:
+        partitions[KEY_EXTERNAL_FLASH] = PartitionLayout(
+            size=board.external_flash["size"], region=KEY_EXTERNAL_FLASH
+        )
     CORE.data[KEY_ZEPHYR] = ZephyrData(
         board=board,
         conf_files={},
         overlays={OVERLAY_FILE_APP: ZephyrOverlay()},
         extra_build_files={},
-        pm_static=[],
+        partitions=partitions,
     )
     return config
 
@@ -323,10 +441,6 @@ def zephyr_add_cdc_acm(config, id):
     )
 
 
-def zephyr_add_pm_static(section: list[Section]):
-    CORE.data[KEY_ZEPHYR][KEY_PM_STATIC].extend(section)
-
-
 def _cleanup_conf_files(path: Path, files: dict) -> None:
     conf_files = path.rglob("*.conf")
     valid_files = [CORE.relative_build_path(f"zephyr/{p}") for p in files]
@@ -376,8 +490,11 @@ def copy_files():
             CORE.relative_build_path(filename),
         )
 
-    pm_static = "\n".join(str(item) for item in zephyr_data()[KEY_PM_STATIC])
-    if pm_static:
+    pm_static = {}
+    for region in zephyr_data()[KEY_PARTITIONS].values():
+        pm_static.update(region.to_dict())
+    if len(pm_static) > 0:
+        pm_static_yaml = yaml.dump(pm_static, indent=4)
         write_file_if_changed(
-            CORE.relative_build_path("zephyr/pm_static.yml"), pm_static
+            CORE.relative_build_path("zephyr/pm_static.yml"), pm_static_yaml
         )

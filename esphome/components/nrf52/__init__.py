@@ -8,9 +8,7 @@ import textwrap
 from esphome import pins
 import esphome.codegen as cg
 from esphome.components.zephyr import (
-    Section,
     copy_files as zephyr_copy_files,
-    zephyr_add_pm_static,
     zephyr_add_prj_conf,
     zephyr_data,
     zephyr_overlay,
@@ -18,7 +16,12 @@ from esphome.components.zephyr import (
     zephyr_setup_preferences,
     zephyr_to_code,
 )
-from esphome.components.zephyr.const import KEY_BOARD, KEY_ZEPHYR
+from esphome.components.zephyr.const import (
+    KEY_BOARD,
+    KEY_FLASH_PRIMARY,
+    KEY_PARTITIONS,
+    KEY_ZEPHYR,
+)
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_BOARD,
@@ -112,12 +115,13 @@ def _set_core_data(config):
     board = Nrf52Board.from_dict(info)
     zephyr_set_core_data(config, board)
 
-    if board.bootloader:
-        sections = [
-            Section(p["name"], p["address"], p["size"], "flash_primary")
-            for p in board.bootloader[CONF_PARTITIONS]
-        ]
-        zephyr_add_pm_static(sections)
+    # Only add bootloader partitions for non-MCUboot bootloaders
+    # MCUboot partitions are handled by the mcuboot component
+    if board.bootloader and board.bootloader[CONF_TYPE] != BOOTLOADER_MCUBOOT:
+        for p in board.bootloader[CONF_PARTITIONS]:
+            zephyr_data()[KEY_PARTITIONS][KEY_FLASH_PRIMARY].add(
+                p["name"], p["address"], p["size"]
+            )
 
     return config
 
@@ -249,6 +253,7 @@ def _validate_dfu():
 
 
 def _final_validate(config):
+    zephyr_data()[KEY_PARTITIONS][KEY_FLASH_PRIMARY].validate()
     if CONF_DFU in config:
         _validate_dfu()
 
