@@ -1,6 +1,7 @@
 from pathlib import Path
 import textwrap
 
+from esphome.components.nrf52.const import CONF_LABEL
 from esphome.components.zephyr import (
     KEY_BOARD,
     PrjConfValueType,
@@ -15,7 +16,7 @@ from esphome.components.zephyr.const import (
     KEY_PARTITIONS,
 )
 import esphome.config_validation as cv
-from esphome.const import CONF_MODE
+from esphome.const import CONF_MODE, CONF_SIZE
 
 CODEOWNERS = ["@dawret"]
 DEPENDENCIES = ["zephyr"]
@@ -25,13 +26,15 @@ MODE_SINGLE_BANK = "single_bank"
 MODE_DUAL_BANK = "dual_bank"
 
 DEFAULT_ERASE_BLOCK_SIZE = 0x1000
-DEFAULT_MCUBOOT_PARTITION_SIZE = 0xC000
+# This size give some space for potential serial recovery, logging or image signing
+DEFAULT_MCUBOOT_PARTITION_SIZE = 0xE000
 MCUBOOT_PAD_SIZE = 0x200
+MCUBOOT = "mcuboot"
 MCUBOOT_PRIMARY = "mcuboot_primary"
 MCUBOOT_SECONDARY = "mcuboot_secondary"
 MCUBOOT_PAD = "mcuboot_pad"
-MCUBOOT_CONF = Path("sysbuild/mcuboot.conf")
-
+APP = "app"
+MCUBOOT_CONF = "sysbuild/mcuboot.conf"
 CONF_MCUBOOT_PARTITION_SIZE = "mcuboot_partition_size"
 CONF_USE_EXTERNAL_FLASH = "use_external_flash"
 
@@ -39,14 +42,14 @@ CONF_USE_EXTERNAL_FLASH = "use_external_flash"
 def _set_core_data(config):
     board = zephyr_data()[KEY_BOARD]
     flash_primary = zephyr_data()[KEY_PARTITIONS][KEY_FLASH_PRIMARY]
-    flash_primary.add_start("mcuboot", config[CONF_MCUBOOT_PARTITION_SIZE])
+    flash_primary.add_start(MCUBOOT, config[CONF_MCUBOOT_PARTITION_SIZE])
     space = flash_primary.available_space
     mcuboot_primary = None
     if config[CONF_USE_EXTERNAL_FLASH]:
-        space = min(space, board.external_flash["size"] - DEFAULT_ERASE_BLOCK_SIZE)
+        space = min(space, board.external_flash[CONF_SIZE] - DEFAULT_ERASE_BLOCK_SIZE)
     if config[CONF_MODE] == MODE_SINGLE_BANK or config[CONF_USE_EXTERNAL_FLASH]:
         mcuboot_primary = flash_primary.add_start(
-            MCUBOOT_PRIMARY, space, [MCUBOOT_PAD, "app"]
+            MCUBOOT_PRIMARY, space, [MCUBOOT_PAD, APP]
         )
     else:
         sectors = space // DEFAULT_ERASE_BLOCK_SIZE
@@ -56,7 +59,7 @@ def _set_core_data(config):
         slot1_size = space - slot0_size
 
         mcuboot_primary = flash_primary.add_start(
-            MCUBOOT_PRIMARY, slot0_size, [MCUBOOT_PAD, "app"]
+            MCUBOOT_PRIMARY, slot0_size, [MCUBOOT_PAD, APP]
         )
         flash_primary.add_start(MCUBOOT_SECONDARY, slot1_size)
 
@@ -125,7 +128,7 @@ FINAL_VALIDATE_SCHEMA = _final_validate
 def _add_mcuboot_conf(
     name: str, value: PrjConfValueType, required: bool = True
 ) -> None:
-    zephyr_add_conf(MCUBOOT_CONF, name, value, required)
+    zephyr_add_conf(Path(MCUBOOT_CONF), name, value, required)
 
 
 def generate_dt_partitions(partitions):
@@ -139,11 +142,12 @@ def generate_dt_partitions(partitions):
     )
     for p in partitions:
         label = p.name
-        if label == "mcuboot":
+        # This renaming is needed to satisfy the zephyr build system
+        if label == MCUBOOT:
             label = "boot_partition"
-        if label == "mcuboot_primary":
+        if label == MCUBOOT_PRIMARY:
             label = "slot0_partition"
-        if label == "mcuboot_secondary":
+        if label == MCUBOOT_SECONDARY:
             label = "slot1_partition"
         output += textwrap.dedent(
             f"""
@@ -157,6 +161,12 @@ def generate_dt_partitions(partitions):
 
 
 def set_partitions(config, overlay):
+    """
+    This function generated the partition dts overlay
+    This is not really required when using partition manager,
+    However on some boards (ie. xiao_ble) the build system complains
+    about missing partitions in the overlay.
+    """
     board = zephyr_data()[KEY_BOARD]
     flash_primary = zephyr_data()[KEY_PARTITIONS][KEY_FLASH_PRIMARY]
     partitions = generate_dt_partitions(flash_primary.get_top_level_partitions())
@@ -164,11 +174,11 @@ def set_partitions(config, overlay):
     flash0.add_property("/delete-node/ partitions")
     flash0.add_entry("partitions", partitions)
     if config[CONF_USE_EXTERNAL_FLASH]:
-        label = f"&{board.external_flash['label']}"
+        label = f"&{board.external_flash[CONF_LABEL]}"
         overlay.add_chosen("nordic,pm-ext-flash", label)
         flash_external = zephyr_data()[KEY_PARTITIONS][KEY_EXTERNAL_FLASH]
         partitions = generate_dt_partitions(flash_external.get_top_level_partitions())
-        ext_flash = overlay.node(board.external_flash["label"])
+        ext_flash = overlay.node(board.external_flash[CONF_LABEL])
         ext_flash.add_property("/delete-node/ partitions")
         ext_flash.add_entry("partitions", partitions)
 
@@ -210,13 +220,18 @@ async def to_code(config):
     _add_mcuboot_conf("BOOT_DIRECT_XIP", False)
 
     # Disable signature
-    _add_mcuboot_conf("BOOT_SIGNATURE_TYPE_NONE", True)
-    _add_mcuboot_conf("BOOT_ENCRYPT_IMAGE", False)
+    zephyr_add_sysbuild_conf("SB_CONFIG_BOOT_SIGNATURE_TYPE_NONE", True)
 
     # Disable serial recovery and usb
     _add_mcuboot_conf("MCUBOOT_SERIAL", False)
     _add_mcuboot_conf("BOOT_USB_DFU_NO", True)
     _add_mcuboot_conf("LOG", False)
+    _add_mcuboot_conf("SERIAL", False)
+    _add_mcuboot_conf("CONSOLE", False)
     _add_mcuboot_conf("USB_DEVICE_STACK", False)
+
+    # Disable hardware crypto to save space
+    # We're using tinycrypt for signature verification
+    _add_mcuboot_conf("HW_CC3XX", False)
 
     set_overlay(config)

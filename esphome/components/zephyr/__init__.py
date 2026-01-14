@@ -28,6 +28,14 @@ from .const import (
 
 CODEOWNERS = ["@tomaszduda23"]
 
+
+def AUTO_LOAD():
+    components = []
+    if CORE.data[KEY_ZEPHYR]["mcuboot"]:
+        components.append("mcuboot")
+    return components
+
+
 SETTINGS_STORAGE_PARTITION_SIZE = 0x2000
 
 PrjConfValueType = bool | str | int
