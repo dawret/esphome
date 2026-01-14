@@ -28,6 +28,8 @@ from .const import (
 
 CODEOWNERS = ["@tomaszduda23"]
 
+SETTINGS_STORAGE_PARTITION_SIZE = 0x2000
+
 PrjConfValueType = bool | str | int
 
 
@@ -294,9 +296,17 @@ class ZephyrData(TypedDict):
     overlays: dict[str, ZephyrOverlay]
     extra_build_files: dict[str, Path]
     partitions: dict[str, PartitionLayout]
+    mcuboot: bool
 
 
-def zephyr_set_core_data(config, board: ZephyrBoard):
+def zephyr_validate(config):
+    partitions = zephyr_data()[KEY_PARTITIONS]
+    for region in partitions.values():
+        region.validate()
+    return config
+
+
+def zephyr_set_core_data(config, board: ZephyrBoard, mcuboot: bool = False):
     partitions = {
         KEY_FLASH_PRIMARY: PartitionLayout(
             size=board.flash_size, region=KEY_FLASH_PRIMARY
@@ -312,8 +322,14 @@ def zephyr_set_core_data(config, board: ZephyrBoard):
         overlays={OVERLAY_FILE_APP: ZephyrOverlay()},
         extra_build_files={},
         partitions=partitions,
+        mcuboot=mcuboot,
     )
     return config
+
+
+def zephyr_add_default_partitions() -> None:
+    flash_primary = zephyr_data()[KEY_PARTITIONS][KEY_FLASH_PRIMARY]
+    flash_primary.add_end("settings_storage", SETTINGS_STORAGE_PARTITION_SIZE)
 
 
 def zephyr_data() -> ZephyrData:

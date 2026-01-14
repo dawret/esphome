@@ -9,12 +9,14 @@ from esphome import pins
 import esphome.codegen as cg
 from esphome.components.zephyr import (
     copy_files as zephyr_copy_files,
+    zephyr_add_default_partitions,
     zephyr_add_prj_conf,
     zephyr_data,
     zephyr_overlay,
     zephyr_set_core_data,
     zephyr_setup_preferences,
     zephyr_to_code,
+    zephyr_validate,
 )
 from esphome.components.zephyr.const import (
     KEY_BOARD,
@@ -54,6 +56,7 @@ from .const import (
     BOOTLOADER_NONE,
     BOOTLOADER_NORDIC,
     CONF_BOOTLOADER,
+    CONF_BOOTLOADERS,
     CONF_EXT_FLASH,
     CONF_FLASH_SIZE,
     CONF_LABEL,
@@ -91,17 +94,22 @@ def _get_board_info(config):
         board_info[CONF_FLASH_SIZE] = FLASH_SIZE_MAP[board_info[CONF_MCU]]
     if CONF_EXT_FLASH in board_config:
         board_info[CONF_EXT_FLASH] = board_config[CONF_EXT_FLASH]
-    if CONF_BOOTLOADER in config:
-        bootloader = config[CONF_BOOTLOADER]
-        if bootloader == BOOTLOADER_NONE:
-            board_info[CONF_BOOTLOADER] = None
-        else:
-            board_info[CONF_BOOTLOADER] = {
-                CONF_TYPE: bootloader,
-                CONF_PARTITIONS: BOOTLOADER_PARTITION_MAP[bootloader],
-            }
 
     return board_info
+
+
+def _validate_bootloaders(config):
+    if CONF_BOOTLOADERS in config:
+        bootloaders = config[CONF_BOOTLOADERS]
+        if len(bootloaders) > 2:
+            raise cv.Invalid("A maximum of two bootloaders can be specified")
+        if len(bootloaders) == 2 and BOOTLOADER_MCUBOOT not in bootloaders:
+            raise cv.Invalid("Only MCUBoot is allowed as a second bootloader")
+    elif CONF_BOOTLOADER in config:
+        bootloader = config.pop(CONF_BOOTLOADER)
+        config[CONF_BOOTLOADERS] = [bootloader]
+
+    return config
 
 
 def _set_core_data(config):
@@ -110,18 +118,35 @@ def _set_core_data(config):
     CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION] = cv.Version.parse(
         config[CONF_FRAMEWORK][CONF_VERSION]
     )
-
     info = _get_board_info(config)
-    board = Nrf52Board.from_dict(info)
-    zephyr_set_core_data(config, board)
+    mcuboot = False
+    if CONF_BOOTLOADERS in config:
+        conf_bootloaders = config[CONF_BOOTLOADERS].copy()
+        if BOOTLOADER_MCUBOOT in conf_bootloaders:
+            conf_bootloaders.remove(BOOTLOADER_MCUBOOT)
+            mcuboot = True
+        if len(conf_bootloaders) == 1:
+            bootloader = conf_bootloaders[0]
+            if bootloader == BOOTLOADER_NONE:
+                info[CONF_BOOTLOADER] = None
+            elif bootloader in BOOTLOADER_PARTITION_MAP:
+                info[CONF_BOOTLOADER] = {
+                    CONF_TYPE: bootloader,
+                    CONF_PARTITIONS: BOOTLOADER_PARTITION_MAP[bootloader],
+                }
+            else:
+                raise cv.Invalid(f"Invalid first-stage bootloader: {bootloader}")
 
-    # Only add bootloader partitions for non-MCUboot bootloaders
-    # MCUboot partitions are handled by the mcuboot component
+    board = Nrf52Board.from_dict(info)
+    zephyr_set_core_data(config, board=board, mcuboot=mcuboot)
+
     if board.bootloader and board.bootloader[CONF_TYPE] != BOOTLOADER_MCUBOOT:
         for p in board.bootloader[CONF_PARTITIONS]:
             zephyr_data()[KEY_PARTITIONS][KEY_FLASH_PRIMARY].add(
                 p["name"], p["address"], p["size"]
             )
+
+    zephyr_add_default_partitions()
 
     return config
 
@@ -217,6 +242,9 @@ CONFIG_SCHEMA = cv.All(
         {
             cv.Required(CONF_BOARD): BOARD_SCHEMA,
             cv.Optional(CONF_BOOTLOADER): cv.one_of(*BOOTLOADERS, lower=True),
+            cv.Optional(CONF_BOOTLOADERS): cv.ensure_list(
+                cv.one_of(*BOOTLOADERS, lower=True)
+            ),
             cv.Optional(CONF_DFU): cv.Schema(
                 {
                     cv.GenerateID(): cv.declare_id(DeviceFirmwareUpdate),
@@ -236,6 +264,8 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_FRAMEWORK, default={}): FRAMEWORK_SCHEMA,
         }
     ),
+    cv.has_at_most_one_key((CONF_BOOTLOADER, CONF_BOOTLOADERS)),
+    _validate_bootloaders,
     _set_core_data,
 )
 
@@ -253,6 +283,7 @@ def _validate_dfu():
 
 
 def _final_validate(config):
+    zephyr_validate(config)
     zephyr_data()[KEY_PARTITIONS][KEY_FLASH_PRIMARY].validate()
     if CONF_DFU in config:
         _validate_dfu()

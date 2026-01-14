@@ -5,6 +5,7 @@ BOOTLOADER_NORDIC = "nordic"
 BOOTLOADER_NONE = "none"
 
 CONF_BOOTLOADER = "bootloader"
+CONF_BOOTLOADERS = "bootloaders"
 CONF_EXT_FLASH = "external_flash"
 CONF_FLASH_SIZE = "flash_size"
 CONF_LABEL = "label"
