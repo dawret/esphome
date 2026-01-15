@@ -1,14 +1,18 @@
 #ifdef USE_ZEPHYR
 
+#include <zephyr/device.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/watchdog.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/random/random.h>
+#include <zephyr/usb/usb_device.h>
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/defines.h"
 
 namespace esphome {
+
+#define ZEPHYR_USB_CDC_COUNT DT_NUM_INST_STATUS_OKAY(zephyr_cdc_acm_uart)
 
 #ifdef CONFIG_WATCHDOG
 static int wdt_channel_id = -1;  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
@@ -101,6 +105,9 @@ void setup();
 void loop();
 
 int main() {
+#if ZEPHYR_USB_CDC_COUNT > 0
+  usb_enable(nullptr);
+#endif
   setup();
   while (true) {
     loop();
