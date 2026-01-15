@@ -378,12 +378,11 @@ async def to_code(config: ConfigType) -> None:
     zephyr_add_prj_conf("WATCHDOG", True)
     zephyr_add_prj_conf("WDT_DISABLE_AT_BOOT", False)
     # disable console
-    zephyr_add_prj_conf("UART_CONSOLE", False)
-    zephyr_add_prj_conf("CONSOLE", False)
+    zephyr_add_prj_conf("UART_CONSOLE", True)
+    zephyr_add_prj_conf("CONSOLE", True)
     zephyr_add_prj_conf("REBOOT", True)
 
     if zephyr_data()["mcuboot"]:
-        print("Configuring mcuboot support")
         zephyr_add_prj_conf("CONFIG_MCUMGR", True)
         zephyr_add_prj_conf("CONFIG_CRC", True)
         zephyr_add_prj_conf("CONFIG_BASE64", True)
@@ -392,7 +391,6 @@ async def to_code(config: ConfigType) -> None:
         zephyr_add_prj_conf("CONFIG_ZCBOR", True)
         zephyr_add_prj_conf("CONFIG_BOOTLOADER_MCUBOOT", True)
         zephyr_add_prj_conf("CONFIG_UART_LINE_CTRL", True)
-        zephyr_add_prj_conf("CONFIG_NET_BUF", True)
         zephyr_add_prj_conf("CONFIG_IMG_MANAGER", True)
         zephyr_add_prj_conf("CONFIG_MCUMGR_GRP_IMG", True)
         zephyr_add_prj_conf("CONFIG_MCUMGR_GRP_OS", True)
@@ -402,7 +400,6 @@ async def to_code(config: ConfigType) -> None:
 
 @coroutine_with_priority(CoroPriority.DIAGNOSTICS)
 async def _dfu_to_code(dfu_config):
-    print("Configuring dfu")
     cg.add_define("USE_NRF52_DFU")
     var = cg.new_Pvariable(dfu_config[CONF_ID])
     pin = await cg.gpio_pin_expression(dfu_config[CONF_RESET_PIN])
