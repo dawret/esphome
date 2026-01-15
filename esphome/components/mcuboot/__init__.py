@@ -226,10 +226,15 @@ async def to_code(config):
     # Disable serial recovery and usb
     _add_mcuboot_conf("MCUBOOT_SERIAL", False)
     _add_mcuboot_conf("BOOT_USB_DFU_NO", True)
-    _add_mcuboot_conf("LOG", False)
-    _add_mcuboot_conf("SERIAL", False)
-    _add_mcuboot_conf("CONSOLE", False)
+    _add_mcuboot_conf("LOG", True)
+    _add_mcuboot_conf("MCUBOOT_LOG_LEVEL_DBG", True)
+    # _add_mcuboot_conf("LOG_BACKEND_UART", True)
+    _add_mcuboot_conf("SERIAL", True)
+    _add_mcuboot_conf("CONSOLE", True)
+    _add_mcuboot_conf("UART_CONSOLE", True)
     _add_mcuboot_conf("USB_DEVICE_STACK", False)
+
+    zephyr_overlay("sysbuild/mcuboot.overlay").add_chosen("zephyr,console", "&uart0")
 
     # Disable hardware crypto to save space
     # We're using tinycrypt for signature verification
