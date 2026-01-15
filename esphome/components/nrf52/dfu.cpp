@@ -7,6 +7,9 @@
 #include <zephyr/drivers/uart/cdc_acm.h>
 #include "esphome/core/log.h"
 
+#include <zephyr/sys/reboot.h>
+#include <hal/nrf_power.h>
+
 namespace esphome {
 namespace nrf52 {
 
@@ -34,9 +37,11 @@ void DeviceFirmwareUpdate::setup() {
 void DeviceFirmwareUpdate::loop() {
   if (goto_dfu) {
     goto_dfu = false;
-    volatile uint32_t *dbl_reset_mem = (volatile uint32_t *) 0x20007F7C;
-    (*dbl_reset_mem) = DFU_DBL_RESET_MAGIC;
-    this->reset_pin_->digital_write(true);
+    nrf_power_gpregret_set(NRF_POWER, 0, 0x57);
+    sys_reboot(SYS_REBOOT_WARM);
+    // volatile uint32_t *dbl_reset_mem = (volatile uint32_t *) 0x20007F7C;
+    //(*dbl_reset_mem) = DFU_DBL_RESET_MAGIC;
+    // this->reset_pin_->digital_write(true);
   }
 }
 

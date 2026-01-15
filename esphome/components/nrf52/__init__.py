@@ -9,6 +9,7 @@ from esphome import pins
 import esphome.codegen as cg
 from esphome.components.zephyr import (
     copy_files as zephyr_copy_files,
+    zephyr_add_cdc_acm,
     zephyr_add_default_partitions,
     zephyr_add_prj_conf,
     zephyr_data,
@@ -326,12 +327,13 @@ async def to_code(config: ConfigType) -> None:
         BOOTLOADER_ADAFRUIT_UF2_V7,
         BOOTLOADER_ADAFRUIT_UF2_V6,
     ):
+        pass
         # make sure that firmware.zip is created
         # for Adafruit_nRF52_Bootloader
-        cg.add_platformio_option("board_upload.protocol", "nrfutil")
-        cg.add_platformio_option("board_upload.use_1200bps_touch", "true")
-        cg.add_platformio_option("board_upload.require_upload_port", "true")
-        cg.add_platformio_option("board_upload.wait_for_upload_port", "true")
+        # cg.add_platformio_option("board_upload.protocol", "nrfutil")
+        # cg.add_platformio_option("board_upload.use_1200bps_touch", "true")
+        # cg.add_platformio_option("board_upload.require_upload_port", "true")
+        # cg.add_platformio_option("board_upload.wait_for_upload_port", "true")
 
     zephyr_setup_preferences()
     zephyr_to_code(config)
@@ -377,11 +379,28 @@ async def to_code(config: ConfigType) -> None:
     zephyr_add_prj_conf("WDT_DISABLE_AT_BOOT", False)
     # disable console
     zephyr_add_prj_conf("UART_CONSOLE", False)
-    zephyr_add_prj_conf("CONSOLE", False)
+    zephyr_add_prj_conf("CONSOLE", True)
+    zephyr_add_prj_conf("REBOOT", True)
+
+    zephyr_add_prj_conf("CONFIG_MCUMGR", True)
+    zephyr_add_prj_conf("CONFIG_CRC", True)
+    zephyr_add_prj_conf("CONFIG_BASE64", True)
+    zephyr_add_prj_conf("CONFIG_STREAM_FLASH", True)
+    zephyr_add_prj_conf("CONFIG_MCUMGR_TRANSPORT_UART", True)
+    zephyr_add_prj_conf("CONFIG_ZCBOR", True)
+    zephyr_add_prj_conf("CONFIG_BOOTLOADER_MCUBOOT", True)
+    zephyr_add_prj_conf("CONFIG_UART_LINE_CTRL", True)
+    zephyr_add_prj_conf("CONFIG_NET_BUF", True)
+    zephyr_add_prj_conf("CONFIG_IMG_MANAGER", True)
+    zephyr_add_prj_conf("CONFIG_MCUMGR_GRP_IMG", True)
+    zephyr_add_prj_conf("CONFIG_MCUMGR_GRP_OS", True)
+    zephyr_add_cdc_acm(config, 1)
+    zephyr_overlay().add_chosen("zephyr,uart-mcumgr", "&cdc_acm_uart1")
 
 
 @coroutine_with_priority(CoroPriority.DIAGNOSTICS)
 async def _dfu_to_code(dfu_config):
+    print("Configuring dfu")
     cg.add_define("USE_NRF52_DFU")
     var = cg.new_Pvariable(dfu_config[CONF_ID])
     pin = await cg.gpio_pin_expression(dfu_config[CONF_RESET_PIN])

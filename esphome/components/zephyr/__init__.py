@@ -462,6 +462,7 @@ def zephyr_add_cdc_acm(config, id):
     zephyr_overlay().node("zephyr_udc0").add_entry(
         f"cdc_acm_uart{id}",
         'compatible = "zephyr,cdc-acm-uart";',
+        label=f"cdc_acm_uart{id}",
     )
 
 
