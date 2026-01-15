@@ -26,8 +26,9 @@ MODE_SINGLE_BANK = "single_bank"
 MODE_DUAL_BANK = "dual_bank"
 
 DEFAULT_ERASE_BLOCK_SIZE = 0x1000
-# This size give some space for potential serial recovery, logging or image signing
-DEFAULT_MCUBOOT_PARTITION_SIZE = 0xE000
+# To satisfy fprotect on some chips, this needs to be a multiple of 32KB.
+# Since that is too small, we need to jump to 64KB.
+DEFAULT_MCUBOOT_PARTITION_SIZE = 0x10000
 MCUBOOT_PAD_SIZE = 0x200
 MCUBOOT = "mcuboot"
 MCUBOOT_PRIMARY = "mcuboot_primary"
