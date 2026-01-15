@@ -54,10 +54,10 @@ def _set_core_data(config):
         )
     else:
         sectors = space // DEFAULT_ERASE_BLOCK_SIZE
-        # swap using offset needs either equally sized slots,
-        # or the secondary slot one sector bigger than the primary
-        slot0_size = (sectors // 2) * DEFAULT_ERASE_BLOCK_SIZE
-        slot1_size = space - slot0_size
+        # swap using move needs either equally sized slots,
+        # or the primary slot one sector bigger than the secondary
+        slot1_size = (sectors // 2) * DEFAULT_ERASE_BLOCK_SIZE
+        slot0_size = space - slot1_size
 
         mcuboot_primary = flash_primary.add_start(
             MCUBOOT_PRIMARY, slot0_size, [MCUBOOT_PAD, APP]
@@ -66,7 +66,7 @@ def _set_core_data(config):
 
     if config[CONF_USE_EXTERNAL_FLASH]:
         flash_external = zephyr_data()[KEY_PARTITIONS][KEY_EXTERNAL_FLASH]
-        flash_external.add_start(MCUBOOT_SECONDARY, space + DEFAULT_ERASE_BLOCK_SIZE)
+        flash_external.add_start(MCUBOOT_SECONDARY, space)
     flash_primary.add(MCUBOOT_PAD, mcuboot_primary.address, MCUBOOT_PAD_SIZE)
     return config
 
