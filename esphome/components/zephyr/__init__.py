@@ -88,20 +88,27 @@ class PartitionLayout:
 
     def _free(self) -> tuple[int, int]:
         parts = self.get_top_level_partitions()
-        start = 0
-        end = self.size
         if len(parts) == 0:
-            return start, end
+            return 0, self.size
+
+        # Check for free space at the beginning (before first partition)
+        if parts[0].address > 0:
+            return 0, parts[0].address
+
+        # Check for gaps between consecutive partitions
         for p in range(len(parts) - 1):
             current = parts[p]
-            next = parts[p + 1]
-            if current.end_address < next.address:
-                start = current.end_address
-                end = next.address
-                break
-        if start == 0 and end == self.size:
-            raise cv.Invalid("No free space available in partition layout")
-        return start, end
+            next_part = parts[p + 1]
+            if current.end_address < next_part.address:
+                return current.end_address, next_part.address
+
+        # Check for free space at the end (after last partition)
+        last = parts[-1]
+        if last.end_address < self.size:
+            return last.end_address, self.size
+
+        # No free space found
+        raise cv.Invalid("No free space available in partition layout")
 
     def add(
         self,
