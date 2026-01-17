@@ -178,7 +178,7 @@ def _validate_framework_config(config):
         name = c[CONF_NAME]
         if name in components:
             raise cv.Invalid(f"Component {name} specified multiple times")
-        components[name] = c[CONF_SOURCE]
+        components[name] = c[CONF_VERSION]
 
     config[CONF_COMPONENTS] = [f"{k}@{v}" for k, v in components.items() if v]
 
