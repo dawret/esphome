@@ -24,9 +24,12 @@ from esphome.components.zephyr.const import (
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_BOARD,
+    CONF_COMPONENTS,
     CONF_FRAMEWORK,
     CONF_ID,
+    CONF_NAME,
     CONF_RESET_PIN,
+    CONF_SOURCE,
     CONF_VERSION,
     CONF_VOLTAGE,
     KEY_CORE,
@@ -65,12 +68,6 @@ def set_core_data(config: ConfigType) -> ConfigType:
     if config[KEY_BOOTLOADER] in BOOTLOADER_CONFIG:
         zephyr_add_pm_static(BOOTLOADER_CONFIG[config[KEY_BOOTLOADER]])
 
-    return config
-
-
-def set_framework(config: ConfigType) -> ConfigType:
-    version = cv.Version.parse(cv.version_number(config[CONF_FRAMEWORK][CONF_VERSION]))
-    CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION] = version
     return config
 
 
@@ -114,8 +111,113 @@ CONF_DFU = "dfu"
 CONF_DCDC = "dcdc"
 CONF_REG0 = "reg0"
 CONF_UICR_ERASE = "uicr_erase"
+CONF_PLATFORM_VERSION = "platform_version"
+CONF_TOOLCHAIN_VERSION = "toolchain_version"
 
 VOLTAGE_LEVELS = [1.8, 2.1, 2.4, 2.7, 3.0, 3.3]
+
+PLATFORM_RECOMMENDED_VERSION = "10.3.0-1"
+FRAMEWORK_RECOMMENDED_VERSION = "2.6.1-7"
+TOOLCHAIN_RECOMMENDED_VERSION = "0.17.4-0"
+
+PLATFORM_SOURCE_TEMPLATE = "https://github.com/tomaszduda23/platform-nordicnrf52/archive/refs/tags/v{release}.zip"
+FRAMEWORK_SOURCE_TEMPLATE = (
+    "https://github.com/tomaszduda23/framework-sdk-nrf/archive/refs/tags/v{release}.zip"
+)
+TOOLCHAIN_SOURCE_TEMPLATE = (
+    "https://github.com/tomaszduda23/toolchain-sdk-ng/archive/refs/tags/v{release}.zip"
+)
+
+
+def _parse_package_version(value, url_template):
+    try:
+        ver = cv.Version.parse(cv.version_number(value))
+        release = f"{ver.major}.{ver.minor}.{ver.patch}"
+        if ver.extra:
+            release += f"-{ver.extra}"
+        return url_template.format(release=release)
+    except cv.Invalid:
+        # Allow for custom URLs / local FS paths and for None
+        return value
+
+
+def _parse_platform_version(value):
+    return _parse_package_version(
+        value,
+        PLATFORM_SOURCE_TEMPLATE,
+    )
+
+
+def _parse_framework_version(value):
+    return _parse_package_version(value, FRAMEWORK_SOURCE_TEMPLATE)
+
+
+def _parse_toolchain_version(value):
+    return _parse_package_version(value, TOOLCHAIN_SOURCE_TEMPLATE)
+
+
+def _validate_framework_config(config):
+    config = config.copy()
+    components = {}
+
+    if CONF_SOURCE in config:
+        print(config[CONF_SOURCE])
+        if config[CONF_VERSION] == "recommended":
+            raise cv.Invalid("If source is set, version must be set too")
+    else:
+        if config[CONF_VERSION] == "recommended":
+            config[CONF_VERSION] = FRAMEWORK_RECOMMENDED_VERSION
+        config[CONF_SOURCE] = _parse_framework_version(config[CONF_VERSION])
+
+    components = {
+        "platformio/framework-zephyr": config[CONF_SOURCE],
+        "platformio/toolchain-gccarmnoneeabi": config[CONF_TOOLCHAIN_VERSION],
+    }
+
+    for c in config.get(CONF_COMPONENTS, []):
+        name = c[CONF_NAME]
+        if name in components:
+            raise cv.Invalid(f"Component {name} specified multiple times")
+        components[name] = c[CONF_SOURCE]
+
+    config[CONF_COMPONENTS] = [f"{k}@{v}" for k, v in components.items() if v]
+
+    return config
+
+
+FRAMEWORK_SCHEMA = cv.All(
+    cv.Schema(
+        {
+            cv.Optional(CONF_VERSION, default="recommended"): cv.string_strict,
+            cv.Optional(CONF_SOURCE): cv.Any(cv.boolean_false, cv.string_strict),
+            cv.Optional(
+                CONF_PLATFORM_VERSION, default=PLATFORM_RECOMMENDED_VERSION
+            ): _parse_platform_version,
+            cv.Optional(
+                CONF_TOOLCHAIN_VERSION, default=TOOLCHAIN_RECOMMENDED_VERSION
+            ): cv.Any(cv.boolean_false, _parse_toolchain_version),
+            cv.Optional(CONF_COMPONENTS, default=[]): cv.ensure_list(
+                cv.Schema(
+                    {
+                        cv.Required(CONF_NAME): cv.string_strict,
+                        cv.Required(CONF_VERSION): cv.string_strict,
+                    }
+                )
+            ),
+        }
+    ),
+    _validate_framework_config,
+)
+
+
+def set_framework(config: ConfigType) -> ConfigType:
+    config = config.copy()
+    if CONF_FRAMEWORK not in config:
+        config[CONF_FRAMEWORK] = FRAMEWORK_SCHEMA({})
+    version = cv.Version.parse(cv.version_number(config[CONF_FRAMEWORK][CONF_VERSION]))
+    CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION] = version
+    return config
+
 
 CONFIG_SCHEMA = cv.All(
     _detect_bootloader,
@@ -140,11 +242,7 @@ CONFIG_SCHEMA = cv.All(
                     cv.Optional(CONF_UICR_ERASE, default=False): cv.boolean,
                 }
             ),
-            cv.Optional(CONF_FRAMEWORK, default={CONF_VERSION: "2.6.1-7"}): cv.Schema(
-                {
-                    cv.Required(CONF_VERSION): cv.string_strict,
-                }
-            ),
+            cv.Optional(CONF_FRAMEWORK): FRAMEWORK_SCHEMA,
         }
     ),
     set_framework,
@@ -178,17 +276,17 @@ async def to_code(config: ConfigType) -> None:
     cg.add_define("ESPHOME_VARIANT", "NRF52")
     # nRF52 processors are single-core
     cg.add_define(ThreadModel.SINGLE)
+    cg.add_platformio_option(
+        "custom_framework_version", config[CONF_FRAMEWORK][CONF_VERSION]
+    )
     cg.add_platformio_option(CONF_FRAMEWORK, CORE.data[KEY_CORE][KEY_TARGET_FRAMEWORK])
     cg.add_platformio_option(
         "platform",
-        "https://github.com/tomaszduda23/platform-nordicnrf52/archive/refs/tags/v10.3.0-1.zip",
+        config[CONF_FRAMEWORK][CONF_PLATFORM_VERSION],
     )
     cg.add_platformio_option(
         "platform_packages",
-        [
-            f"platformio/framework-zephyr@https://github.com/tomaszduda23/framework-sdk-nrf/archive/refs/tags/v{CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION]}.zip",
-            "platformio/toolchain-gccarmnoneeabi@https://github.com/tomaszduda23/toolchain-sdk-ng/archive/refs/tags/v0.17.4-0.zip",
-        ],
+        config[CONF_FRAMEWORK][CONF_COMPONENTS],
     )
 
     if config[KEY_BOOTLOADER] == BOOTLOADER_MCUBOOT:
