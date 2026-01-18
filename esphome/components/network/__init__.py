@@ -213,6 +213,8 @@ async def to_code(config):
         zephyr_add_prj_conf("CONFIG_NETWORKING", True)
         zephyr_add_prj_conf("NET_IPV6", True)
         zephyr_add_prj_conf("NET_IPV4", False)
+        zephyr_add_prj_conf("NET_TCP", True)
+        zephyr_add_prj_conf("NET_UDP", True)
 
     if enable_ipv6 is not None:
         cg.add_define("USE_NETWORK_IPV6", enable_ipv6)
