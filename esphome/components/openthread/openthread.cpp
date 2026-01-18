@@ -241,7 +241,7 @@ bool OpenThreadComponent::teardown() {
     otSrpClientClearHostAndServices(instance);
     otSrpClientBuffersFreeAllServices(instance);
     global_openthread_component = nullptr;
-#if defined(USE_ESP32) &&ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
+#if defined(USE_ESP32) && ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
     ESP_LOGD(TAG, "Exit main loop ");
     int error = esp_openthread_mainloop_exit();
     if (error != ESP_OK) {
