@@ -160,7 +160,7 @@ CONFIG_SCHEMA = cv.All(
         }
     ).extend(_CONNECTION_SCHEMA),
     cv.has_exactly_one_key(CONF_NETWORK_KEY, CONF_TLV),
-    #only_on_variant(supported=[VARIANT_ESP32C5, VARIANT_ESP32C6, VARIANT_ESP32H2]),
+    # only_on_variant(supported=[VARIANT_ESP32C5, VARIANT_ESP32C6, VARIANT_ESP32H2]),
     _validate,
     _require_vfs_select,
 )
@@ -213,7 +213,7 @@ async def to_code(config):
         zephyr_add_prj_conf("OPENTHREAD_SRP_CLIENT", True)
         zephyr_add_prj_conf(f"OPENTHREAD_{config.get(CONF_DEVICE_TYPE)}", True)
         zephyr_add_prj_conf("OPENTHREAD_DEBUG", False)
-        #zephyr_add_prj_conf("OPENTHREAD_LOG_LEVEL_WARN", True)
-        #zephyr_add_prj_conf("COMMON_LIBC_MALLOC", True)
+        # zephyr_add_prj_conf("OPENTHREAD_LOG_LEVEL_WARN", True)
+        # zephyr_add_prj_conf("COMMON_LIBC_MALLOC", True)
         if tlv := config.get(CONF_TLV):
             cg.add_define("USE_OPENTHREAD_TLVS", tlv)
