@@ -28,6 +28,7 @@ from esphome.const import (
     CONF_FRAMEWORK,
     CONF_ID,
     CONF_NAME,
+    CONF_PLATFORM_VERSION,
     CONF_RESET_PIN,
     CONF_SOURCE,
     CONF_VERSION,
@@ -111,7 +112,6 @@ CONF_DFU = "dfu"
 CONF_DCDC = "dcdc"
 CONF_REG0 = "reg0"
 CONF_UICR_ERASE = "uicr_erase"
-CONF_PLATFORM_VERSION = "platform_version"
 CONF_TOOLCHAIN_VERSION = "toolchain_version"
 
 VOLTAGE_LEVELS = [1.8, 2.1, 2.4, 2.7, 3.0, 3.3]
