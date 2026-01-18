@@ -1,5 +1,5 @@
 from esphome.components.zephyr import Section
-from esphome.components.zephyr.const import KEY_BOOTLOADER
+from esphome.components.zephyr.const import BOOTLOADER_MCUBOOT, KEY_BOOTLOADER
 
 from .const import (
     BOOTLOADER_ADAFRUIT,
@@ -23,6 +23,7 @@ BOARDS_ZEPHYR = {
             BOOTLOADER_ADAFRUIT,
             BOOTLOADER_ADAFRUIT_NRF52_SD132,
             BOOTLOADER_ADAFRUIT_NRF52_SD140_V6,
+            BOOTLOADER_MCUBOOT,
         ]
     },
 }
@@ -30,6 +31,10 @@ BOARDS_ZEPHYR = {
 # https://github.com/ffenix113/zigbee_home/blob/17bb7b9e9d375e756da9e38913f53303937fb66a/types/board/known_boards.go
 # https://learn.adafruit.com/introducing-the-adafruit-nrf52840-feather?view=all#hathach-memory-map
 BOOTLOADER_CONFIG = {
+    BOOTLOADER_MCUBOOT: [
+        Section("app", 0x0, 0xFE000, "flash_primary"),
+        Section("settings_storage", 0xFE000, 0x2000, "flash_primary"),
+    ],
     BOOTLOADER_ADAFRUIT_NRF52_SD132: [
         Section("empty_app_offset", 0x0, 0x26000, "flash_primary"),
     ],
