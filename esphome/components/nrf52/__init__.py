@@ -334,6 +334,9 @@ async def to_code(config: ConfigType) -> None:
     else:
         zephyr_add_prj_conf("CPP", True)
         zephyr_add_prj_conf("REQUIRES_FULL_LIBCPP", True)
+    # OpenThread
+    # TODO: This was to support strdup. Figure out of we need this
+    zephyr_add_prj_conf("PICOLIBC", True)
     # watchdog
     zephyr_add_prj_conf("WATCHDOG", True)
     zephyr_add_prj_conf("WDT_DISABLE_AT_BOOT", False)
