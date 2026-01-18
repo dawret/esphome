@@ -63,7 +63,7 @@ network::IPAddresses OpenThreadComponent::get_ip_addresses() {
 }
 
 std::optional<InstanceLock> InstanceLock::try_acquire(int delay) {
-  if (openthread_api_mutex_try_lock(openthread_get_default_context())) {
+  if (!openthread_api_mutex_try_lock(openthread_get_default_context())) {
     return InstanceLock();
   }
   return {};
