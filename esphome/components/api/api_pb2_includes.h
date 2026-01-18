@@ -31,6 +31,10 @@
 #include <vector>
 #include <string>
 
+#if defined(LOG_LEVEL_NONE)
+#undef LOG_LEVEL_NONE
+#endif
+
 namespace esphome::api {
 
 // This file only provides includes, no actual code
