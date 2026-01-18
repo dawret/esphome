@@ -8,8 +8,16 @@ from esphome.components.esp32 import (
     require_vfs_select,
 )
 from esphome.components.mdns import MDNSComponent, enable_mdns_storage
+from esphome.components.zephyr import zephyr_add_prj_conf
+from esphome.config_helpers import filter_source_files_from_platform
 import esphome.config_validation as cv
-from esphome.const import CONF_CHANNEL, CONF_ENABLE_IPV6, CONF_ID, CONF_USE_ADDRESS
+from esphome.const import (
+    CONF_CHANNEL,
+    CONF_ENABLE_IPV6,
+    CONF_ID,
+    CONF_USE_ADDRESS,
+    PlatformFramework,
+)
 from esphome.core import CORE, TimePeriodMilliseconds
 import esphome.final_validate as fv
 from esphome.types import ConfigType
@@ -36,7 +44,7 @@ AUTO_LOAD = ["network"]
 # Wi-fi / Bluetooth / Thread coexistence isn't implemented at this time
 # TODO: Doesn't conflict with wifi if you're using another ESP as an RCP (radio coprocessor), but this isn't implemented yet
 CONFLICTS_WITH = ["wifi"]
-DEPENDENCIES = ["esp32"]
+# DEPENDENCIES = ["esp32"]
 
 CONF_DEVICE_TYPES = [
     "FTD",
@@ -152,7 +160,7 @@ CONFIG_SCHEMA = cv.All(
         }
     ).extend(_CONNECTION_SCHEMA),
     cv.has_exactly_one_key(CONF_NETWORK_KEY, CONF_TLV),
-    only_on_variant(supported=[VARIANT_ESP32C5, VARIANT_ESP32C6, VARIANT_ESP32H2]),
+    #only_on_variant(supported=[VARIANT_ESP32C5, VARIANT_ESP32C6, VARIANT_ESP32H2]),
     _validate,
     _require_vfs_select,
 )
@@ -169,6 +177,16 @@ def _final_validate(_):
 
 
 FINAL_VALIDATE_SCHEMA = _final_validate
+
+FILTER_SOURCE_FILES = filter_source_files_from_platform(
+    {
+        "openthread_esp.cpp": {
+            PlatformFramework.ESP32_ARDUINO,
+            PlatformFramework.ESP32_IDF,
+        },
+        "openthread_zephyr.cpp": {PlatformFramework.NRF52_ZEPHYR},
+    }
+)
 
 
 async def to_code(config):
@@ -188,4 +206,14 @@ async def to_code(config):
     cg.add(srp.set_mdns(mdns_component))
     await cg.register_component(srp, config)
 
-    set_sdkconfig_options(config)
+    if CORE.is_esp32:
+        set_sdkconfig_options(config)
+    elif CORE.is_nrf52:
+        zephyr_add_prj_conf("NET_L2_OPENTHREAD", True)
+        zephyr_add_prj_conf("OPENTHREAD_SRP_CLIENT", True)
+        zephyr_add_prj_conf(f"OPENTHREAD_{config.get(CONF_DEVICE_TYPE)}", True)
+        zephyr_add_prj_conf("OPENTHREAD_DEBUG", False)
+        #zephyr_add_prj_conf("OPENTHREAD_LOG_LEVEL_WARN", True)
+        #zephyr_add_prj_conf("COMMON_LIBC_MALLOC", True)
+        if tlv := config.get(CONF_TLV):
+            cg.add_define("USE_OPENTHREAD_TLVS", tlv)
