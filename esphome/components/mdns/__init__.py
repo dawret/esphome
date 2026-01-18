@@ -64,7 +64,6 @@ CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(MDNSComponent),
-            # nRF52/Zephyr has no mDNS implementation; disable by default there to avoid linking
             cv.SplitDefault(
                 CONF_DISABLED,
                 esp32=False,
@@ -74,7 +73,7 @@ CONFIG_SCHEMA = cv.All(
                 rtl87xx=False,
                 ln882x=False,
                 host=False,
-                nrf52=True,
+                nrf52=False,
             ): cv.boolean,
             cv.Optional(CONF_SERVICES, default=[]): cv.ensure_list(SERVICE_SCHEMA),
         }

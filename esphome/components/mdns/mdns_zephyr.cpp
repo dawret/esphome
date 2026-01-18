@@ -11,12 +11,14 @@ static const char *const TAG = "mdns.zephyr";
 
 void MDNSComponent::setup() {
   ESP_LOGD(TAG, "Setting up mDNS for Zephyr...");
+  get_mac_address_into_buffer(this->mac_address_);
+  char *mac_ptr = this->mac_address_;
 #ifdef USE_MDNS_STORE_SERVICES
-  this->compile_records_(this->services_);
+  this->compile_records_(this->services_, mac_ptr);
   const auto &services = this->services_;
 #else
   StaticVector<MDNSService, MDNS_SERVICE_COUNT> services;
-  this->compile_records_(services);
+  this->compile_records_(services, mac_ptr);
 #endif
 
   ESP_LOGI(TAG, "mDNS records compiled, waiting for network connectivity before registering services");
