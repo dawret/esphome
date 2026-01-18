@@ -341,9 +341,28 @@ async def to_code(config: ConfigType) -> None:
     zephyr_add_prj_conf("WATCHDOG", True)
     zephyr_add_prj_conf("WDT_DISABLE_AT_BOOT", False)
     # disable console
-    zephyr_add_prj_conf("UART_CONSOLE", False)
-    zephyr_add_prj_conf("CONSOLE", False)
+    zephyr_add_prj_conf("UART_CONSOLE", True)
+    zephyr_add_prj_conf("CONSOLE", True)
     # use NFC pins as GPIO
+
+    # Logging
+    zephyr_add_prj_conf("SERIAL", True)
+    zephyr_add_prj_conf("LOG", True)
+    zephyr_add_prj_conf("LOG_BUFFER_SIZE", 16384)
+    zephyr_add_prj_conf("LOG_PRINTK", True)
+    zephyr_add_prj_conf("LOG_MODE_DEFERRED", True)
+    zephyr_add_prj_conf("LOG_BACKEND_UART", True)
+    zephyr_add_prj_conf("UART_INTERRUPT_DRIVEN", True)
+    zephyr_add_overlay(
+        """
+                / {
+                    chosen {
+                        zephyr,console = &uart0;
+                        zephyr,shell-uart = &uart0;
+                    };
+                };
+            """
+    )
     if framework_ver < cv.Version(2, 9, 2):
         zephyr_add_prj_conf("NFCT_PINS_AS_GPIOS", True)
     else:

@@ -8,6 +8,7 @@
 #include <zephyr/drivers/uart.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/usb/usb_device.h>
+#include <zephyr/logging/log.h>
 
 namespace esphome::logger {
 
@@ -65,6 +66,8 @@ void Logger::pre_setup() {
 
 void HOT Logger::write_msg_(const char *msg, size_t len) {
   // Single write with newline already in buffer (added by caller)
+  LOG_RAW("%.*s", static_cast<int>(len), msg);
+  return;
 #ifdef CONFIG_PRINTK
   // Requires the debug component and an active SWD connection.
   // It is used for pyocd rtt -t nrf52840
