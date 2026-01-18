@@ -115,6 +115,7 @@ CONFIG_SCHEMA = cv.Schema(
             esp32=False,
             rp2040=False,
             bk72xx=False,
+            nrf52=True,
         ): cv.All(
             cv.boolean,
             cv.Any(
@@ -125,6 +126,7 @@ CONFIG_SCHEMA = cv.Schema(
                     esp8266_arduino=cv.Version(0, 0, 0),
                     host=cv.Version(0, 0, 0),
                     rp2040_arduino=cv.Version(0, 0, 0),
+                    nrf52_zephyr=cv.Version(0, 0, 0),
                 ),
                 cv.boolean_false,
             ),
@@ -205,7 +207,7 @@ async def to_code(config):
             add_idf_sdkconfig_option("CONFIG_LWIP_TCPIP_RECVMBOX_SIZE", 64)
 
     # Force IPv6 for nRF52 (Thread is IPv6-only)
-    enable_ipv6 = True if CORE.is_nrf52 else config.get(CONF_ENABLE_IPV6, None)
+    enable_ipv6 = config.get(CONF_ENABLE_IPV6, None)
 
     if CORE.is_nrf52:
         zephyr_add_prj_conf("CONFIG_NETWORKING", True)
