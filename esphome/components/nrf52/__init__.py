@@ -439,6 +439,10 @@ def upload_program(config: ConfigType, args, host: str) -> bool:
         result = _upload_using_platformio(config, host, ["-t", "upload"])
         handled = True
 
+    if host == "JLINK":
+        result = _upload_using_platformio(config, host, ["-t", "flash_jlink"])
+        handled = True
+
     if host == "PYOCD":
         result = _upload_using_platformio(config, host, ["-t", "flash_pyocd"])
         handled = True
