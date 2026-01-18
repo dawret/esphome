@@ -15,6 +15,20 @@ static void on_thread_state_changed(otChangedFlags flags, struct openthread_cont
   if (flags & OT_CHANGED_THREAD_ROLE) {
     otDeviceRole role = otThreadGetDeviceRole(ot_context->instance);
     ESP_LOGI(TAG, "New Thread role: %s", otThreadDeviceRoleToString(role));
+    char buf[NET_IPV6_ADDR_LEN];
+    for (const otNetifAddress *addr = otIp6GetUnicastAddresses(ot_context->instance); addr != nullptr;
+         addr = addr->mNext) {
+      // auto ip_addr = network::IPAddress(reinterpret_cast<const ip_addr_t *>(&addr->mAddress));
+      ESP_LOGI(TAG, "  Address: %s", net_addr_ntop(AF_INET6, (struct in6_addr *) &addr->mAddress, buf, sizeof(buf)));
+    }
+  } else if (flags & 0x200) {
+    ESP_LOGI(TAG, "Thread network data changed");
+    char buf[NET_IPV6_ADDR_LEN];
+    for (const otNetifAddress *addr = otIp6GetUnicastAddresses(ot_context->instance); addr != nullptr;
+         addr = addr->mNext) {
+      // auto ip_addr = network::IPAddress(reinterpret_cast<const ip_addr_t *>(&addr->mAddress));
+      ESP_LOGI(TAG, "  Address: %s", net_addr_ntop(AF_INET6, (struct in6_addr *) &addr->mAddress, buf, sizeof(buf)));
+    }
   }
 }
 
