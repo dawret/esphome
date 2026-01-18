@@ -214,6 +214,11 @@ async def to_code(config):
         zephyr_add_prj_conf("OPENTHREAD_SLAAC", True)
         zephyr_add_prj_conf(f"OPENTHREAD_{config.get(CONF_DEVICE_TYPE)}", True)
         zephyr_add_prj_conf("OPENTHREAD_DEBUG", False)
+        zephyr_add_prj_conf("CONFIG_OPENTHREAD_SHELL", True)
+        zephyr_add_prj_conf("CONFIG_SHELL_ARGC_MAX", 26)
+        zephyr_add_prj_conf("CONFIG_SHELL", True)
+        #zephyr_add_prj_conf("CONFIG_OPENTHREAD_NORDIC_LIBRARY_MASTER", True)
+        zephyr_add_prj_conf("CONFIG_SHELL_CMD_BUFF_SIZE", 416)
         # zephyr_add_prj_conf("OPENTHREAD_LOG_LEVEL_WARN", True)
         # zephyr_add_prj_conf("COMMON_LIBC_MALLOC", True)
         if tlv := config.get(CONF_TLV):
