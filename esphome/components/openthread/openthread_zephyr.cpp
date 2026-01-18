@@ -63,28 +63,27 @@ void OpenThreadComponent::ot_main() {}
 
 network::IPAddresses OpenThreadComponent::get_ip_addresses() {
   network::IPAddresses addresses;
-  return addresses;
-  /*otInstance *instance = openthread_get_default_instance();
   int addr_count = 0;
-  for (otNetifAddress *addr = otIp6GetUnicastAddresses(instance); addr != nullptr; addr = addr->mNext) {
-    if (addr_count + 1 >= addresses.size()) {
-      break;
-    }
-    addresses[addr_count + 1] = network::IPAddress(reinterpret_cast<const ip_addr_t *>(&addr->mAddress));
+  char buf[NET_IPV6_ADDR_LEN];
+  for (const otNetifAddress *addr = otIp6GetUnicastAddresses(openthread_get_default_instance()); addr != nullptr;
+       addr = addr->mNext) {
+    addresses[addr_count + 1] = network::IPAddress(reinterpret_cast<const struct in6_addr *>(&addr->mAddress));
     addr_count++;
   }
-  return addresses;*/
+  return addresses;
 }
 
 std::optional<InstanceLock> InstanceLock::try_acquire(int delay) {
-  if (!openthread_api_mutex_try_lock(openthread_get_default_context())) {
+  struct openthread_context *ot_context = openthread_get_default_context();
+  if (k_mutex_lock(&ot_context->api_lock, K_MSEC(delay)) == 0) {
     return InstanceLock();
   }
   return {};
 }
 
 InstanceLock InstanceLock::acquire() {
-  openthread_api_mutex_lock(openthread_get_default_context());
+  struct openthread_context *ot_context = openthread_get_default_context();
+  k_mutex_lock(&ot_context->api_lock, K_FOREVER);
   return InstanceLock();
 }
 
