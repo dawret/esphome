@@ -172,6 +172,9 @@ async def to_code(config):
             cg.add_library("ESP8266mDNS", None)
         elif CORE.is_rp2040:
             cg.add_library("LEAmDNS", None)
+        elif CORE.is_nrf52:
+            # nRF52 uses Zephyr (mdns_zephyr.cpp). No Arduino mDNS library required.
+            pass
 
     if CORE.is_esp32:
         add_idf_component(name="espressif/mdns", ref="1.9.1")
@@ -245,5 +248,6 @@ FILTER_SOURCE_FILES = filter_source_files_from_platform(
             PlatformFramework.RTL87XX_ARDUINO,
             PlatformFramework.LN882X_ARDUINO,
         },
+        "mdns_zephyr.cpp": {PlatformFramework.NRF52_ZEPHYR},
     }
 )
