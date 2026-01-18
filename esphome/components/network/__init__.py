@@ -107,23 +107,23 @@ def has_high_performance_networking() -> bool:
 
 CONFIG_SCHEMA = cv.Schema(
     {
+        # IPv6 configuration (not applicable to nRF52 - always enabled for Thread)
         cv.SplitDefault(
             CONF_ENABLE_IPV6,
             esp8266=False,
             esp32=False,
             rp2040=False,
             bk72xx=False,
-            host=False,
         ): cv.All(
             cv.boolean,
             cv.Any(
                 cv.require_framework_version(
+                    bk72xx_arduino=cv.Version(1, 7, 0),
                     esp_idf=cv.Version(0, 0, 0),
                     esp32_arduino=cv.Version(0, 0, 0),
                     esp8266_arduino=cv.Version(0, 0, 0),
-                    rp2040_arduino=cv.Version(0, 0, 0),
-                    bk72xx_arduino=cv.Version(1, 7, 0),
                     host=cv.Version(0, 0, 0),
+                    rp2040_arduino=cv.Version(0, 0, 0),
                 ),
                 cv.boolean_false,
             ),
@@ -203,7 +203,10 @@ async def to_code(config):
             add_idf_sdkconfig_option("CONFIG_LWIP_TCP_RECVMBOX_SIZE", 64)
             add_idf_sdkconfig_option("CONFIG_LWIP_TCPIP_RECVMBOX_SIZE", 64)
 
-    if (enable_ipv6 := config.get(CONF_ENABLE_IPV6, None)) is not None:
+    # Force IPv6 for nRF52 (Thread is IPv6-only)
+    enable_ipv6 = True if CORE.is_nrf52 else config.get(CONF_ENABLE_IPV6, None)
+
+    if enable_ipv6 is not None:
         cg.add_define("USE_NETWORK_IPV6", enable_ipv6)
         if enable_ipv6:
             cg.add_define(
