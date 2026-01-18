@@ -158,10 +158,8 @@ def _parse_toolchain_version(value):
 
 def _validate_framework_config(config):
     config = config.copy()
-    components = {}
 
     if CONF_SOURCE in config:
-        print(config[CONF_SOURCE])
         if config[CONF_VERSION] == "recommended":
             raise cv.Invalid("If source is set, version must be set too")
     else:
