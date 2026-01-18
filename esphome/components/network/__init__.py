@@ -4,6 +4,7 @@ import logging
 import esphome.codegen as cg
 from esphome.components.esp32 import add_idf_sdkconfig_option
 from esphome.components.psram import is_guaranteed as psram_is_guaranteed
+from esphome.components.zephyr import zephyr_add_prj_conf
 import esphome.config_validation as cv
 from esphome.const import CONF_ENABLE_IPV6, CONF_MIN_IPV6_ADDR_COUNT
 from esphome.core import CORE, CoroPriority, coroutine_with_priority
@@ -205,6 +206,11 @@ async def to_code(config):
 
     # Force IPv6 for nRF52 (Thread is IPv6-only)
     enable_ipv6 = True if CORE.is_nrf52 else config.get(CONF_ENABLE_IPV6, None)
+
+    if CORE.is_nrf52:
+        zephyr_add_prj_conf("CONFIG_NETWORKING", True)
+        zephyr_add_prj_conf("NET_IPV6", True)
+        zephyr_add_prj_conf("NET_IPV4", False)
 
     if enable_ipv6 is not None:
         cg.add_define("USE_NETWORK_IPV6", enable_ipv6)
