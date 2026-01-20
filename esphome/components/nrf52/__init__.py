@@ -18,6 +18,7 @@ from esphome.components.zephyr import (
 )
 from esphome.components.zephyr.const import (
     BOOTLOADER_MCUBOOT,
+    KEY_BOARD,
     KEY_BOOTLOADER,
     KEY_ZEPHYR,
 )
@@ -31,6 +32,7 @@ from esphome.const import (
     CONF_PLATFORM_VERSION,
     CONF_RESET_PIN,
     CONF_SOURCE,
+    CONF_VARIANT,
     CONF_VERSION,
     CONF_VOLTAGE,
     KEY_CORE,
@@ -210,6 +212,9 @@ FRAMEWORK_SCHEMA = cv.All(
 
 def set_framework(config: ConfigType) -> ConfigType:
     config = config.copy()
+    zephyr_data()[CONF_VARIANT] = config[CONF_BOARD]
+    if "/" in config[CONF_BOARD]:
+        zephyr_data()[KEY_BOARD] = config[CONF_BOARD].split("/")[0]
     if CONF_FRAMEWORK not in config:
         config[CONF_FRAMEWORK] = FRAMEWORK_SCHEMA({})
     version = cv.Version.parse(cv.version_number(config[CONF_FRAMEWORK][CONF_VERSION]))
@@ -268,9 +273,9 @@ FINAL_VALIDATE_SCHEMA = _final_validate
 @coroutine_with_priority(CoroPriority.PLATFORM)
 async def to_code(config: ConfigType) -> None:
     """Convert the configuration to code."""
-    cg.add_platformio_option("board", config[CONF_BOARD])
+    cg.add_platformio_option("board", zephyr_data()[KEY_BOARD])
     cg.add_build_flag("-DUSE_NRF52")
-    cg.add_define("ESPHOME_BOARD", config[CONF_BOARD])
+    cg.add_define("ESPHOME_BOARD", zephyr_data()[KEY_BOARD])
     cg.add_define("ESPHOME_VARIANT", "NRF52")
     # nRF52 processors are single-core
     cg.add_define(ThreadModel.SINGLE)
