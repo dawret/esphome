@@ -137,7 +137,9 @@ def zephyr_to_code(config):
 def zephyr_setup_preferences():
     cg.add(zephyr_ns.setup_preferences())
     zephyr_add_prj_conf("SETTINGS", True)
-    zephyr_add_prj_conf("NVS", True)
+    zephyr_add_prj_conf("SETTINGS_ZMS", True)
+    zephyr_add_prj_conf("ZMS", True)
+    # zephyr_add_prj_conf("NVS", True)
     zephyr_add_prj_conf("FLASH_MAP", True)
     zephyr_add_prj_conf("FLASH", True)
 
