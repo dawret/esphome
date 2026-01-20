@@ -16,6 +16,7 @@ static const char *const TAG = "logger";
 
 #ifdef USE_LOGGER_USB_CDC
 void Logger::loop() {
+#if 0
   if (this->uart_ != UART_SELECTION_USB_CDC || this->uart_dev_ == nullptr) {
     return;
   }
@@ -32,10 +33,12 @@ void Logger::loop() {
     App.schedule_dump_config();
   }
   opened = !opened;
+#endif
 }
 #endif
 
 void Logger::pre_setup() {
+#if 0
   if (this->baud_rate_ > 0) {
     static const struct device *uart_dev = nullptr;
     switch (this->uart_) {
@@ -60,6 +63,7 @@ void Logger::pre_setup() {
       this->uart_dev_ = uart_dev;
     }
   }
+#endif
   global_logger = this;
   ESP_LOGI(TAG, "Log initialized");
 }
