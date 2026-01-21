@@ -252,6 +252,31 @@ def copy_files():
             fake_board_manifest,
         )
 
+    if "5340" in zephyr_data()[KEY_BOARD]:
+        tpl = """
+## Disable serial and UART interface.
+CONFIG_SERIAL=n
+CONFIG_UART_CONSOLE=n
+CONFIG_LOG=n
+
+CONFIG_NRF_802154_SER_RADIO=y
+CONFIG_NRF_802154_CARRIER_FUNCTIONS=y
+CONFIG_NRF_RTC_TIMER_USER_CHAN_COUNT=2
+
+# Enable the frame encryption feature in the radio driver, it's required for proper working
+# OPENTHREAD_CSL_RECEIVER and OPENTHREAD_LINK_METRICS_SUBJECT features
+CONFIG_NRF_802154_ENCRYPTION=y
+
+CONFIG_IPC_RADIO_802154=y
+        """
+        write_file_if_changed(
+            CORE.relative_build_path("zephyr/sysbuild/ipc_radio/prj.conf"), tpl
+        )
+        write_file_if_changed(
+            CORE.relative_build_path("zephyr/sysbuild.conf"),
+            "SB_CONFIG_NETCORE_802154_RPMSG=y",
+        )
+
     for filename, path in zephyr_data()[KEY_EXTRA_BUILD_FILES].items():
         copy_file_if_changed(
             path,
