@@ -40,6 +40,7 @@
 #else
 // True BSD sockets (e.g., host platform)
 #include <sys/select.h>
+#include <sys/time.h>
 #endif
 #endif
 #endif
