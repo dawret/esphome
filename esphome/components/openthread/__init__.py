@@ -210,6 +210,7 @@ async def to_code(config):
         set_sdkconfig_options(config)
     elif CORE.is_nrf52:
         zephyr_add_prj_conf("NET_L2_OPENTHREAD", True)
+        zephyr_add_prj_conf("OPENTHREAD_NORDIC_LIBRARY_FTD", True)
         zephyr_add_prj_conf("OPENTHREAD_SRP_CLIENT", True)
         zephyr_add_prj_conf("OPENTHREAD_SLAAC", True)
         zephyr_add_prj_conf(f"OPENTHREAD_{config.get(CONF_DEVICE_TYPE)}", True)
@@ -217,7 +218,7 @@ async def to_code(config):
         zephyr_add_prj_conf("CONFIG_OPENTHREAD_SHELL", True)
         zephyr_add_prj_conf("CONFIG_SHELL_ARGC_MAX", 26)
         zephyr_add_prj_conf("CONFIG_SHELL", True)
-        #zephyr_add_prj_conf("CONFIG_OPENTHREAD_NORDIC_LIBRARY_MASTER", True)
+        # zephyr_add_prj_conf("CONFIG_OPENTHREAD_NORDIC_LIBRARY_MASTER", True)
         zephyr_add_prj_conf("CONFIG_SHELL_CMD_BUFF_SIZE", 416)
         # zephyr_add_prj_conf("OPENTHREAD_LOG_LEVEL_WARN", True)
         # zephyr_add_prj_conf("COMMON_LIBC_MALLOC", True)
